@@ -25,6 +25,47 @@ from six.moves import range
 from six import iteritems
 
 
+def jaccard(n_x, yr, min_support):
+    """Compute the jaccard similarity between all pairs of users (or items).
+
+    Only **common** users (or items) are taken into account.
+
+    """
+
+    # number of common ys
+    cdef np.ndarray[np.int_t, ndim=2] freq
+    # number of ys
+    cdef np.ndarray[np.int_t, ndim=1] freqi
+    # the similarity matrix
+    cdef np.ndarray[np.double_t, ndim=2] sim
+
+    cdef int xi, xj
+    cdef int min_sprt = min_support
+
+    freq = np.zeros((n_x, n_x), np.int)
+    freqi = np.zeros(n_x, np.int)
+    sim = np.zeros((n_x, n_x), np.double)
+
+    for y, y_ratings in iteritems(yr):
+        for xi, ri in y_ratings:
+            freq[xi] += 1
+            for xj, rj in y_ratings:
+                freq[xi, xj] += 1
+
+    for xi in range(n_x):
+        sim[xi, xi] = 1
+        for xj in range(xi + 1, n_x):
+            if freq[xi, xj] < min_sprt:
+                sim[xi, xj] = 0
+            else:
+                denum = freqi[xi] + freqi[xj] - freq[xj, xj]
+                sim[xi, xj] = freq[xi, xj] / denum
+
+            sim[xj, xi] = sim[xi, xj]
+
+    return sim
+
+
 def cosine(n_x, yr, min_support):
     """Compute the cosine similarity between all pairs of users (or items).
 

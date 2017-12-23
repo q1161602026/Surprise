@@ -201,7 +201,8 @@ class AlgoBase:
         Returns:
             The similarity matrix."""
 
-        construction_func = {'cosine': sims.cosine,
+        construction_func = {'jaccard': sims.jaccard,
+                             'cosine': sims.cosine,
                              'msd': sims.msd,
                              'pearson': sims.pearson,
                              'pearson_baseline': sims.pearson_baseline}

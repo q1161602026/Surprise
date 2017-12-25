@@ -5,7 +5,7 @@ The :mod:`dump` module defines the :func:`dump` function.
 import pickle
 
 
-def dump(file_name, predictions=None, algo=None, verbose=0):
+def dump(file_name, predictions=None, algo=None, verbose=False):
     """A basic wrapper around Pickle to serialize a list of prediction and/or
     an algorithm on drive.
 
@@ -20,8 +20,8 @@ def dump(file_name, predictions=None, algo=None, verbose=0):
         algo(:class:`Algorithm\
             <surprise.prediction_algorithms.algo_base.AlgoBase>`, optional):
             The algorithm to dump.
-        verbose(int): Level of verbosity. If ``1``, then a message indicates
-            that the dumping went successfully. Default is ``0``.
+        verbose(boolean): Level of verbosity. If ``True``, then a message indicates
+            that the dumping went successfully. Default is ``False``.
     """
 
     dump_obj = {'predictions': predictions,

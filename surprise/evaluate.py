@@ -19,7 +19,7 @@ from . import accuracy
 from .dump import dump
 
 
-def evaluate(algo, data, measures=['rmse', 'mae'], with_dump=False,
+def evaluate(algo, data, measures=('rmse', 'mae'), with_dump=False,
              dump_dir=None, verbose=1):
     """Evaluate the performance of the algorithm on given data.
 
@@ -86,7 +86,7 @@ def evaluate(algo, data, measures=['rmse', 'mae'], with_dump=False,
             file_name += '-fold{0}'.format(fold_i + 1)
             file_name = os.path.join(dump_dir, file_name)
 
-            dump(file_name, predictions, trainset, algo)
+            dump(file_name, predictions, algo, (verbose > 0))
 
     if verbose:
         print('-' * 12)

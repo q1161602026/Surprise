@@ -93,6 +93,7 @@ class Dataset:
     def __init__(self, reader):
 
         self.reader = reader
+        self.n_folds = -1
 
     @classmethod
     def load_builtin(cls, name='ml-100k'):
@@ -133,7 +134,6 @@ class Dataset:
                 if choice in ['yes', 'y', '', 'omg this is so nice of you!!']:
                     answered = True
                 elif choice in ['no', 'n', 'hell no why would i want that?!']:
-                    answered = True
                     print("Ok then, I'm out!")
                     sys.exit()
 
@@ -222,6 +222,11 @@ class Dataset:
                            itertools.islice(f, self.reader.skip_lines, None)]
         return raw_ratings
 
+    def raw_folds(self):
+        """it would be override in derived class"""
+
+        yield []
+
     def folds(self):
         """Generator function to iterate over the folds of the Dataset.
 
@@ -233,7 +238,7 @@ class Dataset:
 
         for raw_trainset, raw_testset in self.raw_folds():
             trainset = self.construct_trainset(raw_trainset)
-            testset = self.construct_testset(raw_testset)
+            testset = Dataset.construct_testset(raw_testset)
             yield trainset, testset
 
     def construct_trainset(self, raw_trainset):
@@ -281,7 +286,8 @@ class Dataset:
 
         return trainset
 
-    def construct_testset(self, raw_testset):
+    @staticmethod
+    def construct_testset(raw_testset):
 
         return [(ruid, riid, r_ui_trans)
                 for (ruid, riid, r_ui_trans, _) in raw_testset]
@@ -318,6 +324,9 @@ class DatasetAutoFolds(Dataset):
 
         Dataset.__init__(self, reader)
         self.has_been_split = False  # flag indicating if split() was called.
+
+        self.shuffle = True
+        self.seed = 0
 
         if ratings_file is not None:
             self.ratings_file = ratings_file
@@ -361,37 +370,35 @@ class DatasetAutoFolds(Dataset):
 
         return k_folds(self.raw_ratings, self.n_folds)
 
-    def split(self, n_folds=5, shuffle=True):
+    def split(self, n_folds=5, shuffle=True, seed=0):
         """Split the dataset into folds for future cross-validation.
 
         If you forget to call :meth:`split`, the dataset will be automatically
         shuffled and split for 5-folds cross-validation.
-
-        You can obtain repeatable splits over your all your experiments by
-        seeding the RNG: ::
-
-            import random
-            random.seed(my_seed)  # call this before you call split!
 
         Args:
             n_folds(:obj:`int`): The number of folds.
             shuffle(:obj:`bool`): Whether to shuffle ratings before splitting.
                 If ``False``, folds will always be the same each time the
                 experiment is run. Default is ``True``.
+            seed(:obj:`int`): You can obtain repeatable splits over your all your experiments
+                by seeding the RNG
         """
-
         if n_folds > len(self.raw_ratings) or n_folds < 2:
             raise ValueError('Incorrect value for n_folds. Must be >=2 and '
                              'less than the number or entries')
+        self.shuffle = shuffle
 
         if shuffle:
+            self.seed = seed
+            random.seed(seed)
             random.shuffle(self.raw_ratings)
 
         self.n_folds = n_folds
         self.has_been_split = True
 
 
-class Reader():
+class Reader(object):
     """The Reader class is used to parse a file containing ratings.
 
     Such a file is assumed to specify only one rating per line, and each line
@@ -454,7 +461,7 @@ class Reader():
                             entities]
 
     def parse_line(self, line):
-        '''Parse a line.
+        """Parse a line.
 
         Ratings are translated so that they are all strictly positive.
 
@@ -464,7 +471,7 @@ class Reader():
         Returns:
             tuple: User id, item id, rating and timestamp. The timestamp is set
             to ``None`` if it does no exist.
-            '''
+        """
 
         line = line.split(self.sep)
         try:
@@ -504,7 +511,7 @@ class Trainset:
         n_ratings: Total number of ratings :math:`|R_{train}|`.
         rating_scale(tuple): The minimum and maximal rating of the rating
             scale.
-        global_mean: The mean of all ratings :math:`\\mu`.
+        _global_mean: The mean of all ratings :math:`\\mu`.
     """
 
     def __init__(self, ur, ir, n_users, n_items, n_ratings, rating_scale,

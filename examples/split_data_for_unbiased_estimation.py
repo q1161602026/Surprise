@@ -33,7 +33,7 @@ data.split(n_folds=3)
 # Select your best algo with grid search.
 print('Grid Search...')
 param_grid = {'n_epochs': [5, 10], 'lr_all': [0.002, 0.005]}
-grid_search = GridSearch(SVD, param_grid, measures=['RMSE'], verbose=0)
+grid_search = GridSearch(SVD, param_grid, measures={'RMSE'}, verbose=True)
 grid_search.evaluate(data)
 
 algo = grid_search.best_estimator['RMSE']

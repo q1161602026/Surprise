@@ -19,7 +19,7 @@ from . import accuracy
 from .dump import dump
 
 
-def evaluate(algo, data, measures=('rmse', 'mae'), with_dump=False,
+def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False,
              dump_dir=None, verbose=1):
     """Evaluate the performance of the algorithm on given data.
 
@@ -32,9 +32,9 @@ def evaluate(algo, data, measures=('rmse', 'mae'), with_dump=False,
             The algorithm to evaluate.
         data(:obj:`Dataset <surprise.dataset.Dataset>`): The dataset on which
             to evaluate the algorithm.
-        measures(list of string): The performance measures to compute. Allowed
+        measures(set of string): The performance measures to compute. Allowed
             names are function names as defined in the :mod:`accuracy
-            <surprise.accuracy>` module. Default is ``['rmse', 'mae']``.
+            <surprise.accuracy>` module. Default is ``{'rmse', 'mae'}``.
         with_dump(bool): If True, the predictions and the algorithm will be
             dumped for later further analysis at each fold (see :ref:`FAQ
             <serialize_an_algorithm>`). The file names will be set as:
@@ -117,9 +117,9 @@ class GridSearch:
             list of values as keys. All combinations will be evaluated with
             desired algorithm. Dict parameters such as ``sim_options`` require
             special treatment, see :ref:`this note<grid_search_note>`.
-        measures(list of string): The performance measures to compute. Allowed
+        measures(set of string): The performance measures to compute. Allowed
             names are function names as defined in the :mod:`accuracy
-            <surprise.accuracy>` module.  Default is ``['rmse', 'mae']``.
+            <surprise.accuracy>` module.  Default is ``{'rmse', 'mae'}``.
         n_jobs(int): The maximum number of algorithm training in parallel.
 
             - If ``-1``, all CPUs are used.
@@ -173,8 +173,8 @@ class GridSearch:
             measure.
         """
 
-    def __init__(self, algo_class, param_grid, measures=['rmse', 'mae'],
-                 n_jobs=-1, pre_dispatch='2*n_jobs', seed=None, verbose=1,
+    def __init__(self, algo_class, param_grid, measures={'rmse', 'mae'},
+                 n_jobs=-1, pre_dispatch='2*n_jobs', seed=None, verbose=True,
                  joblib_verbose=0):
         self.best_params = CaseInsensitiveDefaultDict(list)
         self.best_index = CaseInsensitiveDefaultDict(list)
@@ -194,17 +194,17 @@ class GridSearch:
         # special treatment.
         if 'sim_options' in self.param_grid:
             sim_options = self.param_grid['sim_options']
-            sim_options_list = [dict(zip(sim_options, v)) for v in
+            sim_options_list = [dict(zip(sim_options.keys(), v)) for v in
                                 product(*sim_options.values())]
             self.param_grid['sim_options'] = sim_options_list
 
         if 'bsl_options' in self.param_grid:
             bsl_options = self.param_grid['bsl_options']
-            bsl_options_list = [dict(zip(bsl_options, v)) for v in
+            bsl_options_list = [dict(zip(bsl_options.keys(), v)) for v in
                                 product(*bsl_options.values())]
             self.param_grid['bsl_options'] = bsl_options_list
 
-        self.param_combinations = [dict(zip(self.param_grid, v)) for v in
+        self.param_combinations = [dict(zip(self.param_grid.keys(), v)) for v in
                                    product(*self.param_grid.values())]
 
     def evaluate(self, data):

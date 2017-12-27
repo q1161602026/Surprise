@@ -20,6 +20,6 @@ data.split(n_folds=3)
 algo = SVD()
 
 # Evaluate performances of our algorithm on the dataset.
-perf = evaluate(algo, data, measures=['RMSE', 'MAE'])
+perf = evaluate(algo, data, measures={'RMSE', 'MAE'})
 
 print_perf(perf)

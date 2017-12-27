@@ -49,6 +49,8 @@ class AlgoBase:
         """
 
         self.trainset = trainset
+        # (re) Initialise baselines
+        self.bu = self.bi = None
 
     def estimate(self, iuid, iiid):
         pass

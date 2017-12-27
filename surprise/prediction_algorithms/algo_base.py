@@ -27,8 +27,11 @@ class AlgoBase:
 
     def __init__(self, **kwargs):
 
+        self.trainset = None
         self.bsl_options = kwargs.get('bsl_options', {})
         self.sim_options = kwargs.get('sim_options', {})
+        self.bu = None
+        self.bi = None
         if 'user_based' not in self.sim_options:
             self.sim_options['user_based'] = True
 
@@ -47,8 +50,8 @@ class AlgoBase:
 
         self.trainset = trainset
 
-        # (re) Initialise baselines
-        self.bu = self.bi = None
+    def estimate(self, iuid, iiid):
+        pass
 
     def predict(self, uid, iid, r_ui=None, clip=True, verbose=False):
         """Compute the rating prediction for given user and item.
@@ -205,7 +208,8 @@ class AlgoBase:
                              'cosine': sims.cosine,
                              'msd': sims.msd,
                              'pearson': sims.pearson,
-                             'pearson_baseline': sims.pearson_baseline}
+                             'pearson_baseline': sims.pearson_baseline,
+                             'cosine_adjusted': sims.cosine_adjusted}
 
         if self.sim_options['user_based']:
             n_x, yr = self.trainset.n_users, self.trainset.ir
@@ -226,6 +230,22 @@ class AlgoBase:
                 bx, by = bi, bu
 
             args += [self.trainset.global_mean, bx, by, shrinkage]
+
+        elif name == 'pearson':
+            if self.sim_options['user_based']:
+                x_mean = self.trainset.user_mean
+            else:
+                x_mean = self.trainset.item_mean
+
+            args += [x_mean]
+
+        elif name == 'cosine_adjusted':
+            if self.sim_options['user_based']:
+                y_mean = self.trainset.item_mean
+            else:
+                y_mean = self.trainset.user_mean
+
+            args += [y_mean]
 
         try:
             print('Computing the {0} similarity matrix...'.format(name))

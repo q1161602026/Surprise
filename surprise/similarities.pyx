@@ -195,7 +195,7 @@ def msd(n_x, yr, min_support):
         sim[xi, xi] = 1  # completely arbitrary and useless anyway
         for xj in range(xi + 1, n_x):
             if freq[xi, xj] < min_sprt:
-                sim[xi, xj] == 0
+                continue
             else:
                 # return inverse of (msd + 1) (+ 1 to avoid dividing by zero)
                 sim[xi, xj] = 1 / (sq_diff[xi, xj] / freq[xi, xj] + 1)
@@ -204,8 +204,7 @@ def msd(n_x, yr, min_support):
 
     return sim
 
-
-def pearson(n_x, yr, min_support):
+def pearson(n_x, yr, min_support, x_mean):
     """Compute the Pearson correlation coefficient between all pairs of users
     (or items).
 
@@ -238,58 +237,53 @@ def pearson(n_x, yr, min_support):
     <https://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient#For_a_sample>`__.
 
     """
-
     # number of common ys
     cdef np.ndarray[np.int_t, ndim=2] freq
-    # sum (r_xy * r_x'y) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] prods
-    # sum (rxy ^ 2) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] sqi
-    # sum (rx'y ^ 2) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] sqj
-    # sum (rxy) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] si
-    # sum (rx'y) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] sj
+    # sum (r_xy - b_xy) * (r_x'y - b_x'y) for common ys
+    cdef np.ndarray[np.double_t, ndim=2] prods
+    # sum (r_xy - b_xy)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_i
+    # sum (r_x'y - b_x'y)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_j
     # the similarity matrix
     cdef np.ndarray[np.double_t, ndim=2] sim
 
-    cdef int xi, xj, ri, rj
+    cdef np.ndarray[np.double_t] x_mean_
+    cdef int xi, xj
     cdef int min_sprt = min_support
 
     freq = np.zeros((n_x, n_x), np.int)
-    prods = np.zeros((n_x, n_x), np.int)
-    sqi = np.zeros((n_x, n_x), np.int)
-    sqj = np.zeros((n_x, n_x), np.int)
-    si = np.zeros((n_x, n_x), np.int)
-    sj = np.zeros((n_x, n_x), np.int)
+    prods = np.zeros((n_x, n_x), np.double)
+    sq_diff_i = np.zeros((n_x, n_x), np.double)
+    sq_diff_j = np.zeros((n_x, n_x), np.double)
     sim = np.zeros((n_x, n_x), np.double)
 
-    for y, y_ratings in iteritems(yr):
+    x_mean_ = x_mean
+
+    for _, y_ratings in iteritems(yr):
         for xi, ri in y_ratings:
+            xi_avg = x_mean_[xi]
             for xj, rj in y_ratings:
-                prods[xi, xj] += ri * rj
+                xj_avg = x_mean_[xj]
                 freq[xi, xj] += 1
-                sqi[xi, xj] += ri**2
-                sqj[xi, xj] += rj**2
-                si[xi, xj] += ri
-                sj[xi, xj] += rj
+                diff_i = (ri - xi_avg)
+                diff_j = (rj - xj_avg)
+                prods[xi, xj] += diff_i * diff_j
+                sq_diff_i[xi, xj] += diff_i**2
+                sq_diff_j[xi, xj] += diff_j**2
 
     for xi in range(n_x):
         sim[xi, xi] = 1
         for xj in range(xi + 1, n_x):
 
             if freq[xi, xj] < min_sprt:
-                sim[xi, xj] == 0
+                continue
             else:
-                n = freq[xi, xj]
-                num = n * prods[xi, xj] - si[xi, xj] * sj[xi, xj]
-                denum = np.sqrt((n * sqi[xi, xj] - si[xi, xj]**2) *
-                                (n * sqj[xi, xj] - sj[xi, xj]**2))
+                denum = np.sqrt(sq_diff_i[xi, xj] * sq_diff_j[xi, xj])
                 if denum == 0:
                     sim[xi, xj] = 0
                 else:
-                    sim[xi, xj] = num / denum
+                    sim[xi, xj] = prods[xi, xj] / denum
 
             sim[xj, xi] = sim[xi, xj]
 
@@ -394,6 +388,57 @@ def pearson_baseline(n_x, yr, min_support, global_mean, x_biases, y_biases,
                 sim[xi, xj] *= (freq[xi, xj] - 1) / (freq[xi, xj] - 1 +
                                                      shrinkage)
 
+            sim[xj, xi] = sim[xi, xj]
+
+    return sim
+
+def cosine_adjusted(n_x, yr, min_support, y_mean):
+
+    # number of common ys
+    cdef np.ndarray[np.int_t, ndim=2] freq
+    # sum (r_xy - b_xy) * (r_x'y - b_x'y) for common ys
+    cdef np.ndarray[np.double_t, ndim=2] prods
+    # sum (r_xy - b_xy)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_i
+    # sum (r_x'y - b_x'y)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_j
+    # the similarity matrix
+    cdef np.ndarray[np.double_t, ndim=2] sim
+
+    cdef np.ndarray[np.double_t] y_mean_
+    cdef int xi, xj
+    cdef int min_sprt = min_support
+
+    freq = np.zeros((n_x, n_x), np.int)
+    prods = np.zeros((n_x, n_x), np.double)
+    sq_diff_i = np.zeros((n_x, n_x), np.double)
+    sq_diff_j = np.zeros((n_x, n_x), np.double)
+    sim = np.zeros((n_x, n_x), np.double)
+
+    y_mean_ = y_mean
+
+    for y, y_ratings in iteritems(yr):
+        y_avg = y_mean_[y]
+        for xi, ri in y_ratings:
+            for xj, rj in y_ratings:
+                freq[xi, xj] += 1
+                diff_i = (ri - y_avg)
+                diff_j = (rj - y_avg)
+                prods[xi, xj] += diff_i * diff_j
+                sq_diff_i[xi, xj] += diff_i**2
+                sq_diff_j[xi, xj] += diff_j**2
+
+    for xi in range(n_x):
+        sim[xi, xi] = 1
+        for xj in range(xi + 1, n_x):
+            if freq[xi, xj] < min_sprt:
+                continue
+            else:
+                denum = np.sqrt(sq_diff_i[xi, xj] * sq_diff_j[xi, xj])
+                if denum == 0:
+                    sim[xi, xj] = 0
+                else:
+                    sim[xi, xj] = prods[xi, xj] / denum
             sim[xj, xi] = sim[xi, xj]
 
     return sim

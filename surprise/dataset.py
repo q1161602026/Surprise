@@ -532,6 +532,9 @@ class Trainset:
         self._inner2raw_id_users = None
         self._inner2raw_id_items = None
 
+        self._user_mean = None
+        self._item_mean = None
+
     def knows_user(self, uid):
         """Indicate if the user is part of the trainset.
 
@@ -732,3 +735,30 @@ class Trainset:
                                          self.all_ratings()])
 
         return self._global_mean
+
+    @property
+    def user_mean(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_mean is None:
+            self._user_mean = np.zeros(self.n_users)
+
+            for uid, ratings in self.ur.iteritems():
+                self._user_mean[uid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._user_mean
+
+    @property
+    def item_mean(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._item_mean is None:
+
+            self._item_mean = np.zeros(self.n_items)
+
+            for iid, ratings in self.ir.iteritems():
+                self._item_mean[iid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._item_mean

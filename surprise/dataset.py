@@ -94,6 +94,10 @@ class Dataset:
 
         self.reader = reader
         self.n_folds = -1
+        self._raw2inner_id_users = None
+        self._raw2inner_id_items = None
+        self._inner2raw_id_users = None
+        self._inner2raw_id_items = None
 
     @classmethod
     def load_builtin(cls, name='ml-100k'):
@@ -238,56 +242,23 @@ class Dataset:
 
         for raw_trainset, raw_testset in self.raw_folds():
             trainset = self.construct_trainset(raw_trainset)
-            testset = Dataset.construct_testset(raw_testset)
+            testset = self._construct_testset(raw_testset)
             yield trainset, testset
 
     def construct_trainset(self, raw_trainset):
 
-        raw2inner_id_users = {}
-        raw2inner_id_items = {}
-
-        current_u_index = 0
-        current_i_index = 0
-
-        ur = defaultdict(list)
-        ir = defaultdict(list)
-
-        # user raw id, item raw id, translated rating, time stamp
-        for urid, irid, r, timestamp in raw_trainset:
-            try:
-                uid = raw2inner_id_users[urid]
-            except KeyError:
-                uid = current_u_index
-                raw2inner_id_users[urid] = current_u_index
-                current_u_index += 1
-            try:
-                iid = raw2inner_id_items[irid]
-            except KeyError:
-                iid = current_i_index
-                raw2inner_id_items[irid] = current_i_index
-                current_i_index += 1
-
-            ur[uid].append((iid, r))
-            ir[iid].append((uid, r))
-
-        n_users = len(ur)  # number of users
-        n_items = len(ir)  # number of items
-        n_ratings = len(raw_trainset)
-
-        trainset = Trainset(ur,
-                            ir,
-                            n_users,
-                            n_items,
-                            n_ratings,
+        trainset = Trainset(raw_trainset,
                             self.reader.rating_scale,
-                            self.reader.offset,
-                            raw2inner_id_users,
-                            raw2inner_id_items)
+                            self.reader.offset)
+
+        self._raw2inner_id_users = trainset.raw2inner_id_users
+        self._raw2inner_id_items = trainset.raw2inner_id_items
+        self._inner2raw_id_users = trainset.inner2raw_id_users
+        self._inner2raw_id_items = trainset.inner2raw_id_items
 
         return trainset
 
-    @staticmethod
-    def construct_testset(raw_testset):
+    def _construct_testset(self, raw_testset):
 
         return [(ruid, riid, r_ui_trans)
                 for (ruid, riid, r_ui_trans, _) in raw_testset]
@@ -490,7 +461,193 @@ class Reader(object):
         return uid, iid, float(r) + self.offset, timestamp
 
 
-class Trainset:
+class Instances:
+    """A Instanceset contains all useful data that constitutes instances.
+
+    Attributes:
+        ur(:obj:`defaultdict` of :obj:`list`): The users ratings. This is a
+            dictionary containing lists of tuples of the form ``(item_inner_id,
+            rating)``. The keys are user inner ids.
+        ir(:obj:`defaultdict` of :obj:`list`): The items ratings. This is a
+            dictionary containing lists of tuples of the form ``(user_inner_id,
+            rating)``. The keys are item inner ids.
+        n_users: Total number of users :math:`|U|`.
+        n_items: Total number of items :math:`|I|`.
+        rating_scale(tuple): The minimum and maximal rating of the rating
+            scale.
+    """
+
+    def __init__(self, raw_set, rating_scale, offset):
+
+        self.raw_rating = raw_set
+        self.rating_scale = rating_scale
+        self.offset = offset
+
+        self.ur = None
+        self.ir = None
+
+        self.n_users = None
+        self.n_items = None
+
+        self._raw2inner_id_users = None
+        self._raw2inner_id_items = None
+        # inner2raw dicts could be built right now (or even before) but they
+        # are not always useful so we wait until we need them.
+        self._inner2raw_id_users = None
+        self._inner2raw_id_items = None
+
+    def knows_user(self, uiid):
+        """Indicate if the user is part of the instances.
+
+        A user is part of the instances if the user has at least one rating.
+
+        Args:
+            uiid(int): The (inner) user id. See :ref:`this
+                note<raw_inner_note>`.
+        Returns:
+            ``True`` if user is part of the trainset, else ``False``.
+        """
+
+        return uiid in self.ur
+
+    def knows_item(self, iiid):
+        """Indicate if the item is part of the instances.
+
+        An item is part of the instances if the item was rated at least once.
+
+        Args:
+            iiid(int): The (inner) item id. See :ref:`this
+                note<raw_inner_note>`.
+        Returns:
+            ``True`` if item is part of the trainset, else ``False``.
+        """
+
+        return iiid in self.ir
+
+    def to_inner_uid(self, urid):
+        """Convert a **user** raw id to an inner id.
+
+        See :ref:`this note<raw_inner_note>`.
+
+        Args:
+            urid(str): The user raw id.
+
+        Returns:
+            int: The user inner id.
+
+        Raises:
+            ValueError: When user is not part of the trainset.
+        """
+
+        try:
+            return self._raw2inner_id_users[urid]
+        except KeyError:
+            raise ValueError('User ' + str(urid) +
+                             ' is not part of the trainset.')
+
+    def to_raw_uid(self, uiid):
+        """Convert a **user** inner id to a raw id.
+
+        See :ref:`this note<raw_inner_note>`.
+
+        Args:
+            uiid(int): The user inner id.
+
+        Returns:
+            str: The user raw id.
+
+        Raises:
+            ValueError: When ``iuid`` is not an inner id.
+        """
+
+        try:
+            return self.inner2raw_id_users[uiid]
+        except KeyError:
+            raise ValueError(str(uiid) + ' is not a valid inner id.')
+
+    def to_inner_iid(self, irid):
+        """Convert an **item** raw id to an inner id.
+
+        See :ref:`this note<raw_inner_note>`.
+
+        Args:
+            irid(str): The item raw id.
+
+        Returns:
+            int: The item inner id.
+
+        Raises:
+            ValueError: When item is not part of the trainset.
+        """
+
+        try:
+            return self._raw2inner_id_items[irid]
+        except KeyError:
+            raise ValueError('Item ' + str(irid) +
+                             ' is not part of the trainset.')
+
+    def to_raw_iid(self, iiid):
+        """Convert an **item** inner id to a raw id.
+
+        See :ref:`this note<raw_inner_note>`.
+
+        Args:
+            iiid(int): The item inner id.
+
+        Returns:
+            str: The item raw id.
+
+        Raises:
+            ValueError: When ``iiid`` is not an inner id.
+        """
+
+        try:
+            return self.inner2raw_id_items[iiid]
+        except KeyError:
+            raise ValueError(str(iiid) + ' is not a valid inner id.')
+
+    def all_users(self):
+        """Generator function to iterate over all users.
+
+        Yields:
+            Inner id of users.
+        """
+        pass
+
+    def all_items(self):
+        """Generator function to iterate over all items.
+
+        Yields:
+            Inner id of items.
+        """
+        pass
+
+    @property
+    def raw2inner_id_users(self):
+        return self._raw2inner_id_users
+
+    @property
+    def raw2inner_id_items(self):
+        return self._raw2inner_id_items
+
+    @property
+    def inner2raw_id_users(self):
+        if self._inner2raw_id_users is None:
+            self._inner2raw_id_users = {inner: raw for (raw, inner) in
+                                        iteritems(self._raw2inner_id_users)}
+        return self._inner2raw_id_users
+
+    @property
+    def inner2raw_id_items(self):
+
+        if self._inner2raw_id_items is None:
+            self._inner2raw_id_items = {inner: raw for (raw, inner) in
+                                        iteritems(self._raw2inner_id_items)}
+
+        return self._inner2raw_id_items
+
+
+class Trainset(Instances):
     """A trainset contains all useful data that constitutes a training set.
 
     It is used by the :meth:`train()
@@ -514,156 +671,56 @@ class Trainset:
         _global_mean: The mean of all ratings :math:`\\mu`.
     """
 
-    def __init__(self, ur, ir, n_users, n_items, n_ratings, rating_scale,
-                 offset, raw2inner_id_users, raw2inner_id_items):
+    def __init__(self, raw_trainset, rating_scale, offset):
 
-        self.ur = ur
-        self.ir = ir
-        self.n_users = n_users
-        self.n_items = n_items
-        self.n_ratings = n_ratings
-        self.rating_scale = rating_scale
-        self.offset = offset
-        self._raw2inner_id_users = raw2inner_id_users
-        self._raw2inner_id_items = raw2inner_id_items
+        Instances.__init__(self, raw_trainset, rating_scale, offset)
+
+        self._raw2inner_id_users = {}
+        self._raw2inner_id_items = {}
+
+        current_u_index = 0
+        current_i_index = 0
+
+        self.ur = defaultdict(list)
+        self.ir = defaultdict(list)
+
+        # user raw id, item raw id, translated rating, time stamp
+        for urid, irid, r, timestamp in raw_trainset:
+            try:
+                uiid = self._raw2inner_id_users[urid]
+            except KeyError:
+                uiid = current_u_index
+                self._raw2inner_id_users[urid] = current_u_index
+                current_u_index += 1
+            try:
+                iiid = self._raw2inner_id_items[irid]
+            except KeyError:
+                iiid = current_i_index
+                self._raw2inner_id_items[irid] = current_i_index
+                current_i_index += 1
+
+            self.ur[uiid].append((iiid, r))
+            self.ir[iiid].append((uiid, r))
+
+        self.n_users = len(self.ur)  # number of users
+        self.n_items = len(self.ir)  # number of items
+        self.n_ratings = len(raw_trainset)
+
         self._global_mean = None
-        # inner2raw dicts could be built right now (or even before) but they
-        # are not always useful so we wait until we need them.
-        self._inner2raw_id_users = None
-        self._inner2raw_id_items = None
-
         self._user_mean = None
         self._item_mean = None
-
-    def knows_user(self, uid):
-        """Indicate if the user is part of the trainset.
-
-        A user is part of the trainset if the user has at least one rating.
-
-        Args:
-            uid(int): The (inner) user id. See :ref:`this
-                note<raw_inner_note>`.
-        Returns:
-            ``True`` if user is part of the trainset, else ``False``.
-        """
-
-        return uid in self.ur
-
-    def knows_item(self, iid):
-        """Indicate if the item is part of the trainset.
-
-        An item is part of the trainset if the item was rated at least once.
-
-        Args:
-            iid(int): The (inner) item id. See :ref:`this
-                note<raw_inner_note>`.
-        Returns:
-            ``True`` if item is part of the trainset, else ``False``.
-        """
-
-        return iid in self.ir
-
-    def to_inner_uid(self, ruid):
-        """Convert a **user** raw id to an inner id.
-
-        See :ref:`this note<raw_inner_note>`.
-
-        Args:
-            ruid(str): The user raw id.
-
-        Returns:
-            int: The user inner id.
-
-        Raises:
-            ValueError: When user is not part of the trainset.
-        """
-
-        try:
-            return self._raw2inner_id_users[ruid]
-        except KeyError:
-            raise ValueError('User ' + str(ruid) +
-                             ' is not part of the trainset.')
-
-    def to_raw_uid(self, iuid):
-        """Convert a **user** inner id to a raw id.
-
-        See :ref:`this note<raw_inner_note>`.
-
-        Args:
-            iuid(int): The user inner id.
-
-        Returns:
-            str: The user raw id.
-
-        Raises:
-            ValueError: When ``iuid`` is not an inner id.
-        """
-
-        if self._inner2raw_id_users is None:
-            self._inner2raw_id_users = {inner: raw for (raw, inner) in
-                                        iteritems(self._raw2inner_id_users)}
-
-        try:
-            return self._inner2raw_id_users[iuid]
-        except KeyError:
-            raise ValueError(str(iuid) + ' is not a valid inner id.')
-
-    def to_inner_iid(self, riid):
-        """Convert an **item** raw id to an inner id.
-
-        See :ref:`this note<raw_inner_note>`.
-
-        Args:
-            riid(str): The item raw id.
-
-        Returns:
-            int: The item inner id.
-
-        Raises:
-            ValueError: When item is not part of the trainset.
-        """
-
-        try:
-            return self._raw2inner_id_items[riid]
-        except KeyError:
-            raise ValueError('Item ' + str(riid) +
-                             ' is not part of the trainset.')
-
-    def to_raw_iid(self, iiid):
-        """Convert an **item** inner id to a raw id.
-
-        See :ref:`this note<raw_inner_note>`.
-
-        Args:
-            iiid(int): The item inner id.
-
-        Returns:
-            str: The item raw id.
-
-        Raises:
-            ValueError: When ``iiid`` is not an inner id.
-        """
-
-        if self._inner2raw_id_items is None:
-            self._inner2raw_id_items = {inner: raw for (raw, inner) in
-                                        iteritems(self._raw2inner_id_items)}
-
-        try:
-            return self._inner2raw_id_items[iiid]
-        except KeyError:
-            raise ValueError(str(iiid) + ' is not a valid inner id.')
 
     def all_ratings(self):
         """Generator function to iterate over all ratings.
 
         Yields:
-            A tuple ``(uid, iid, rating)`` where ids are inner ids (see
+            A tuple ``(uiid, iiid, rating)`` where ids are inner ids (see
             :ref:`this note <raw_inner_note>`).
         """
 
-        for u, u_ratings in iteritems(self.ur):
-            for i, r in u_ratings:
-                yield u, i, r
+        for uiid, u_ratings in iteritems(self.ur):
+            for iiid, rating in u_ratings:
+                yield uiid, iiid, rating
 
     def build_testset(self):
         """Return a list of ratings that can be used as a testset in the

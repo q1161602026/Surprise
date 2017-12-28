@@ -48,7 +48,7 @@ print('Biased accuracy on A,', end='   ')
 accuracy.rmse(predictions)
 
 # Compute unbiased accuracy on B
-testset = data.construct_testset(B_raw_ratings)  # testset is now the set B
+testset = data._construct_testset(B_raw_ratings)  # testset is now the set B
 predictions = algo.test(testset)
 print('Unbiased accuracy on B,', end=' ')
 accuracy.rmse(predictions)

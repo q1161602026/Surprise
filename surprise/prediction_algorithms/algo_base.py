@@ -32,6 +32,7 @@ class AlgoBase:
         self.sim_options = kwargs.get('sim_options', {})
         self.bu = None
         self.bi = None
+        self.sim = None
         if 'user_based' not in self.sim_options:
             self.sim_options['user_based'] = True
 
@@ -251,9 +252,9 @@ class AlgoBase:
 
         try:
             print('Computing the {0} similarity matrix...'.format(name))
-            sim = construction_func[name](*args)
+            self.sim = construction_func[name](*args)
             print('Done computing similarity matrix.')
-            return sim
+            return self.sim
         except KeyError:
             raise NameError('Wrong sim name ' + name + '. Allowed values ' +
                             'are ' + ', '.join(construction_func.keys()) + '.')

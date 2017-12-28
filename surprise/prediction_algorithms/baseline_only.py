@@ -24,7 +24,7 @@ class BaselineOnly(AlgoBase):
 
     """
 
-    def __init__(self, bsl_options={}):
+    def __init__(self, bsl_options):
 
         AlgoBase.__init__(self, bsl_options=bsl_options)
 

@@ -19,8 +19,9 @@ from . import accuracy
 from .dump import dump
 
 
-def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False,
-             dump_dir=None, verbose=1):
+def evaluate(algo, data, measures={'rmse', 'mae'},
+             topk_config=None,
+             with_dump=False, dump_dir=None, verbose=1):
     """Evaluate the performance of the algorithm on given data.
 
     Depending on the nature of the ``data`` parameter, it may or may not
@@ -35,6 +36,9 @@ def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False,
         measures(set of string): The performance measures to compute. Allowed
             names are function names as defined in the :mod:`accuracy
             <surprise.accuracy>` module. Default is ``{'rmse', 'mae'}``.
+        topk_config(dict): The performance measures to compute. Allowed
+            names are function names as defined in the :mod:`accuracy
+            <surprise.accuracy>` module. Default is ``{"metric": "precision_recall_score", "k": 20}``.
         with_dump(bool): If True, the predictions and the algorithm will be
             dumped for later further analysis at each fold (see :ref:`FAQ
             <serialize_an_algorithm>`). The file names will be set as:
@@ -49,6 +53,9 @@ def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False,
         A dictionary containing measures as keys and lists as values. Each list
         contains one entry per fold.
     """
+
+    if topk_config is None:
+        topk_config = {'metric': 'precision_recall_score', 'k': 20}
 
     performances = CaseInsensitiveDefaultDict(list)
 
@@ -72,6 +79,16 @@ def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False,
         for measure in measures:
             f = getattr(accuracy, measure.lower())
             performances[measure].append(f(predictions, verbose=verbose))
+
+        metric = topk_config.get('metric', 'precision_recall_score')
+        k = topk_config.get('k', 20)
+        f = getattr(accuracy, metric.lower())
+        if metric == 'precision_recall_score':
+            precision_score, recall_score = f(testset, predictions, k, verbose=verbose)
+            performances['precision'].append(precision_score)
+            performances['recall'].append(recall_score)
+        else:
+            performances[metric].append(f(testset, predictions, k, verbose=verbose))
 
         if with_dump:
 

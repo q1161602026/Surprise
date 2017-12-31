@@ -260,8 +260,12 @@ class Dataset:
 
     def _construct_testset(self, raw_testset):
 
-        return [(ruid, riid, r_ui_trans)
-                for (ruid, riid, r_ui_trans, _) in raw_testset]
+        testset = Testset(raw_testset, self.reader.rating_scale, self.reader.offset,
+                          self._raw2inner_id_users, self._raw2inner_id_items)
+        return testset
+        # return [(ruid, riid, r_ui_trans)
+        #         for (ruid, riid, r_ui_trans, _) in raw_testset]
+#     build_testset
 
 
 class DatasetUserFolds(Dataset):
@@ -477,9 +481,9 @@ class Instances:
             scale.
     """
 
-    def __init__(self, raw_set, rating_scale, offset):
+    def __init__(self, raw_rating, rating_scale, offset):
 
-        self.raw_rating = raw_set
+        self.raw_rating = raw_rating
         self.rating_scale = rating_scale
         self.offset = offset
 
@@ -685,7 +689,7 @@ class Trainset(Instances):
         self.ir = defaultdict(list)
 
         # user raw id, item raw id, translated rating, time stamp
-        for urid, irid, r, timestamp in raw_trainset:
+        for urid, irid, r, timestamp in self.raw_rating:
             try:
                 uiid = self._raw2inner_id_users[urid]
             except KeyError:
@@ -704,7 +708,7 @@ class Trainset(Instances):
 
         self.n_users = len(self.ur)  # number of users
         self.n_items = len(self.ir)  # number of items
-        self.n_ratings = len(raw_trainset)
+        self.n_ratings = len(self.raw_rating)
 
         self._global_mean = None
         self._user_mean = None
@@ -722,7 +726,7 @@ class Trainset(Instances):
             for iiid, rating in u_ratings:
                 yield uiid, iiid, rating
 
-    def build_testset(self):
+    def build_rated_testset(self):
         """Return a list of ratings that can be used as a testset in the
         :meth:`test() <surprise.prediction_algorithms.algo_base.AlgoBase.test>`
         method.
@@ -733,8 +737,8 @@ class Trainset(Instances):
         cases where you want to to test your algorithm on the trainset.
         """
 
-        return [(self.to_raw_uid(u), self.to_raw_iid(i), r)
-                for (u, i, r) in self.all_ratings()]
+        return [(self.to_raw_uid(uiid), self.to_raw_iid(iiid), r)
+                for (uiid, iiid, r) in self.all_ratings()]
 
     def build_anti_testset(self, fill=None):
         """Return a list of ratings that can be used as a testset in the
@@ -781,6 +785,130 @@ class Trainset(Instances):
             Inner id of items.
         """
         return range(self.n_items)
+
+    @property
+    def global_mean(self):
+        """Return the mean of all ratings.
+
+        It's only computed once."""
+        if self._global_mean is None:
+            self._global_mean = np.mean([r for (_, _, r) in
+                                         self.all_ratings()])
+
+        return self._global_mean
+
+    @property
+    def user_mean(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_mean is None:
+            self._user_mean = np.zeros(self.n_users)
+
+            for uid, ratings in self.ur.iteritems():
+                self._user_mean[uid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._user_mean
+
+    @property
+    def item_mean(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._item_mean is None:
+
+            self._item_mean = np.zeros(self.n_items)
+
+            for iid, ratings in self.ir.iteritems():
+                self._item_mean[iid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._item_mean
+
+
+class Testset(Instances):
+
+    def __init__(self, raw_testset, rating_scale, offset, raw2inner_id_users, raw2inner_id_items):
+
+        Instances.__init__(self, raw_testset, rating_scale, offset)
+
+        self._raw2inner_id_users = raw2inner_id_users
+        self._raw2inner_id_items = raw2inner_id_items
+
+        # current_u_index = max(self._raw2inner_id_users.values()) + 1
+        # current_i_index = max(self._raw2inner_id_items.values()) + 1
+
+        self.ur = defaultdict(list)
+        self.ir = defaultdict(list)
+
+        # user raw id, item raw id, translated rating, time stamp
+        for urid, irid, r, timestamp in self.raw_rating:
+            try:
+                uiid = self._raw2inner_id_users[urid]
+            except KeyError:
+                # uiid = current_u_index
+                # self._raw2inner_id_users[urid] = current_u_index
+                # current_u_index += 1
+                continue
+            try:
+                iiid = self._raw2inner_id_items[irid]
+            except KeyError:
+                continue
+                # iiid = current_i_index
+                # self._raw2inner_id_items[irid] = current_i_index
+                # current_i_index += 1
+
+            self.ur[uiid].append((iiid, r))
+            self.ir[iiid].append((uiid, r))
+
+        self.n_users = len(self.ur)  # number of users
+        self.n_items = len(self.ir)  # number of items
+        self.n_ratings = len(raw_testset)
+
+        self._global_mean = None
+        self._user_mean = None
+        self._item_mean = None
+
+    def all_ratings(self):
+        """Generator function to iterate over all ratings.
+
+        Yields:
+            A tuple ``(uiid, iiid, rating)`` where ids are inner ids (see
+            :ref:`this note <raw_inner_note>`).
+        """
+
+        for uiid, u_ratings in iteritems(self.ur):
+            for iiid, rating in u_ratings:
+                yield uiid, iiid, rating
+
+    def build_raw_testset(self):
+        """Return a list of ratings that can be used as a testset in the
+        :meth:`test() <surprise.prediction_algorithms.algo_base.AlgoBase.test>`
+        method.
+
+        The ratings are all the ratings that are in the trainset, i.e. all the
+        ratings returned by the :meth:`all_ratings()
+        <surprise.dataset.Trainset.all_ratings>` generator. This is useful in
+        cases where you want to to test your algorithm on the trainset.
+        """
+
+        return [(self.to_raw_uid(u), self.to_raw_iid(i), r)
+                for (u, i, r) in self.all_ratings()]
+
+    def all_users(self):
+        """Generator function to iterate over all users.
+
+        Yields:
+            Inner id of users.
+        """
+        return (uiid for uiid in self.ur)
+
+    def all_items(self):
+        """Generator function to iterate over all items.
+
+        Yields:
+            Inner id of items.
+        """
+        return (iiid for iiid in self.ir)
 
     @property
     def global_mean(self):

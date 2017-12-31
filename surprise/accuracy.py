@@ -17,7 +17,6 @@ from __future__ import (absolute_import, division, print_function,
 from collections import defaultdict
 import numpy as np
 from six import iteritems
-from .topK import get_top_k
 
 
 def rmse(predictions, verbose=True):
@@ -142,69 +141,3 @@ def fcp(predictions, verbose=True):
         print('FCP:  {0:1.4f}'.format(fcp))
 
     return fcp
-
-
-def precision_recall_score(testset, predictions, k=20, verbose=True):
-
-    hit = 0
-    recommend_count = 0
-    rated_count = len(testset)
-
-    user_top_k = get_top_k(predictions=predictions, k=k)
-    user_recommended = {}
-    for ruid, riid, _ in testset:
-        flag = user_recommended.get(ruid, False)
-        if not flag:
-            recommend_count += len(user_top_k[ruid])
-            user_recommended[ruid] = True
-        if riid in user_top_k[ruid]:
-            hit += 1
-
-
-    precision_score = hit / (1.0 * recommend_count)
-    recall_score = hit / (1.0 * rated_count)
-    if verbose:
-        print('Precision:  {0:1.4f}'.format(precision_score))
-        print('Recall:  {0:1.4f}'.format(recall_score))
-    return precision_score, recall_score
-
-
-def precision(testset, predictions, k=20, verbose=True):
-
-    hit = 0
-    recommend_count = 0
-
-    ur = defaultdict(list)
-
-    # user raw id, item raw id, translated rating, time stamp
-    for uid, iid, _ in testset:
-        ur[uid].append(iid)
-
-    user_top_k = get_top_k(predictions=predictions, k=k)
-    for uid, iid_list in ur.items():
-        recommend_list = user_top_k[uid]
-        recommend_count += len(recommend_list)
-        for item in recommend_list:
-            if item in iid_list:
-                hit += 1
-
-    precision_score = hit / (1.0 * recommend_count)
-    if verbose:
-        print('Precision:  {0:1.4f}'.format(precision_score))
-    return precision_score
-
-
-def recall(testset, predictions, k=20, verbose=True):
-
-    hit = 0
-    rated_count = len(testset)
-
-    user_top_k = get_top_k(predictions=predictions, k=k)
-    for ruid, riid, _ in testset:
-        if riid in user_top_k[ruid]:
-            hit += 1
-
-    recall_score = hit / (1.0 * rated_count)
-    if verbose:
-        print('Recall:  {0:1.4f}'.format(recall_score))
-    return recall_score

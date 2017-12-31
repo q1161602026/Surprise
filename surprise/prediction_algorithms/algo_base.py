@@ -56,7 +56,7 @@ class AlgoBase:
     def estimate(self, iuid, iiid):
         pass
 
-    def predict(self, uid, iid, r_ui=None, clip=True, verbose=False):
+    def predict(self, urid, irid, r_ui=None, clip=True, verbose=False):
         """Compute the rating prediction for given user and item.
 
         The ``predict`` method converts raw ids to inner ids and then calls the
@@ -65,8 +65,8 @@ class AlgoBase:
         to the global mean of all ratings.
 
         Args:
-            uid: (Raw) id of the user. See :ref:`this note<raw_inner_note>`.
-            iid: (Raw) id of the item. See :ref:`this note<raw_inner_note>`.
+            urid: (Raw) id of the user. See :ref:`this note<raw_inner_note>`.
+            irid: (Raw) id of the item. See :ref:`this note<raw_inner_note>`.
             r_ui(float): The true rating :math:`r_{ui}`. Optional, default is
                 ``None``.
             clip(bool): Whether to clip the estimation into the rating scale.
@@ -92,17 +92,16 @@ class AlgoBase:
 
         # Convert raw ids to inner ids
         try:
-            iuid = self.trainset.to_inner_uid(uid)
+            uiid = self.trainset.to_inner_uid(urid)
         except ValueError:
-            iuid = 'UKN__' + str(uid)
+            uiid = 'UKN__' + str(urid)
         try:
-            iiid = self.trainset.to_inner_iid(iid)
+            iiid = self.trainset.to_inner_iid(irid)
         except ValueError:
-            iiid = 'UKN__' + str(iid)
-
+            iiid = 'UKN__' + str(irid)
         details = {}
         try:
-            est = self.estimate(iuid, iiid)
+            est = self.estimate(uiid, iiid)
 
             # If the details dict was also returned
             if isinstance(est, tuple):
@@ -117,15 +116,16 @@ class AlgoBase:
 
         # Remap the rating into its initial rating scale (because the rating
         # scale was translated so that ratings are all >= 1)
-        est -= self.trainset.offset
+        if est is not None:
+            est -= self.trainset.offset
 
-        # clip estimate into [lower_bound, higher_bound]
-        if clip:
-            lower_bound, higher_bound = self.trainset.rating_scale
-            est = min(higher_bound, est)
-            est = max(lower_bound, est)
+            # clip estimate into [lower_bound, higher_bound]
+            if clip:
+                lower_bound, higher_bound = self.trainset.rating_scale
+                est = min(higher_bound, est)
+                est = max(lower_bound, est)
 
-        pred = Prediction(uid, iid, r_ui, est, details)
+        pred = Prediction(urid, irid, r_ui, est, details)
 
         if verbose:
             print(pred)
@@ -151,11 +151,11 @@ class AlgoBase:
         """
 
         # The ratings are translated back to their original scale.
-        predictions = [self.predict(uid,
-                                    iid,
+        predictions = [self.predict(urid,
+                                    irid,
                                     r_ui_trans - self.trainset.offset,
                                     verbose=verbose)
-                       for (uid, iid, r_ui_trans) in testset]
+                       for (urid, irid, r_ui_trans) in testset]
         return predictions
 
     def compute_baselines(self):
@@ -286,7 +286,7 @@ class AlgoBase:
         else:
             all_instances = self.trainset.all_items
 
-        others = [(x, self.sim[iid, x]) for x in all_instances() if x != iid]
+        others = [(x, self.sim[iid, x]) for x in all_instances() if x != iid and self.sim[iid, x] != 0]
         others.sort(key=lambda tple: tple[1], reverse=True)
         k_nearest_neighbors = [j for (j, _) in others[:k]]
 

@@ -27,9 +27,18 @@ class SymmetricAlgo(AlgoBase):
     reversed.
     """
 
-    def __init__(self, sim_options={}, **kwargs):
+    def __init__(self, sim_options=None, **kwargs):
+
+        if sim_options is None:
+            sim_options = {}
 
         AlgoBase.__init__(self, sim_options=sim_options, **kwargs)
+        self.n_x = None
+        self.n_y = None
+        self.xr = None
+        self.yr = None
+        self.bx = None
+        self.by = None
 
     def train(self, trainset):
 
@@ -81,7 +90,10 @@ class KNNBasic(SymmetricAlgo):
             options.
     """
 
-    def __init__(self, k=40, min_k=1, sim_options={}, **kwargs):
+    def __init__(self, k=40, min_k=1, sim_options=None, **kwargs):
+
+        if sim_options is None:
+            sim_options = {}
 
         SymmetricAlgo.__init__(self, sim_options=sim_options, **kwargs)
         self.k = k
@@ -154,12 +166,16 @@ class KNNWithMeans(SymmetricAlgo):
             options.
     """
 
-    def __init__(self, k=40, min_k=1, sim_options={}, **kwargs):
+    def __init__(self, k=40, min_k=1, sim_options=None, **kwargs):
+
+        if sim_options is None:
+            sim_options = {}
 
         SymmetricAlgo.__init__(self, sim_options=sim_options, **kwargs)
 
         self.k = k
         self.min_k = min_k
+        self.means = None
 
     def train(self, trainset):
 
@@ -248,7 +264,12 @@ class KNNBaseline(SymmetricAlgo):
 
     """
 
-    def __init__(self, k=40, min_k=1, sim_options={}, bsl_options={}):
+    def __init__(self, k=40, min_k=1, sim_options=None, bsl_options=None):
+
+        if bsl_options is None:
+            bsl_options = {}
+        if sim_options is None:
+            sim_options = {}
 
         SymmetricAlgo.__init__(self, sim_options=sim_options,
                                bsl_options=bsl_options)
@@ -336,12 +357,18 @@ class KNNWithZScore(SymmetricAlgo):
             options.
     """
 
-    def __init__(self, k=40, min_k=1, sim_options={}, **kwargs):
+    def __init__(self, k=40, min_k=1, sim_options=None, **kwargs):
+
+        if sim_options is None:
+            sim_options = {}
 
         SymmetricAlgo.__init__(self, sim_options=sim_options, **kwargs)
 
         self.k = k
         self.min_k = min_k
+        self.means = None
+        self.sigmas = None
+        self.overall_sigma = None
 
     def train(self, trainset):
 

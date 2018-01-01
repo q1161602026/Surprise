@@ -7,6 +7,8 @@ inherit.
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from .. import accuracy
+
 from .. import similarities as sims
 from .predictions import PredictionImpossible
 from .predictions import Prediction
@@ -33,6 +35,7 @@ class AlgoBase:
         self.bu = None
         self.bi = None
         self.sim = None
+        self.k_nearest_neighbors = None
         if 'user_based' not in self.sim_options:
             self.sim_options['user_based'] = True
 
@@ -51,7 +54,10 @@ class AlgoBase:
 
         self.trainset = trainset
         # (re) Initialise baselines
-        self.bu = self.bi = None
+        self.bu = None
+        self.bi = None
+        self.sim = None
+        self.k_nearest_neighbors = None
 
     def estimate(self, iuid, iiid):
         pass
@@ -155,7 +161,7 @@ class AlgoBase:
                                     irid,
                                     r_ui_trans - self.trainset.offset,
                                     verbose=verbose)
-                       for (urid, irid, r_ui_trans) in testset]
+                       for (urid, irid, r_ui_trans) in testset.build_raw_testset()]
         return predictions
 
     def compute_baselines(self):
@@ -280,7 +286,8 @@ class AlgoBase:
             The list of the ``k`` (inner) ids of the closest users (or items)
             to ``iid``.
         """
-
+        if iid in self.k_nearest_neighbors:
+            return self.k_nearest_neighbors[iid]
         if self.sim_options['user_based']:
             all_instances = self.trainset.all_users
         else:
@@ -290,4 +297,47 @@ class AlgoBase:
         others.sort(key=lambda tple: tple[1], reverse=True)
         k_nearest_neighbors = [j for (j, _) in others[:k]]
 
+        self.k_nearest_neighbors[iid] = k_nearest_neighbors
         return k_nearest_neighbors
+
+    def evaluate(self, testset, measures={'rmse', 'mae'}, verbose=1):
+        """Evaluate the performance of the algorithm on given data.
+
+        Depending on the nature of the ``data`` parameter, it may or may not
+        perform cross validation.
+
+        Args:
+            algo(:obj:`AlgoBase \
+                <surprise.prediction_algorithms.algo_base.AlgoBase>`):
+                The algorithm to evaluate.
+            testset(:obj:`Dataset <surprise.dataset.Testset>`): The dataset on which
+                to evaluate the algorithm.
+            measures(set of string): The performance measures to compute. Allowed
+                names are function names as defined in the :mod:`accuracy
+                <surprise.accuracy>` module. Default is ``{'rmse', 'mae'}``.
+            verbose(int): Level of verbosity. If 0, nothing is printed. If 1
+                (default), accuracy measures for each folds are printed, with a
+                final summary. If 2, every prediction is printed.
+
+        Returns:
+            A dictionary containing measures as keys and lists as values. Each list
+            contains one entry per fold.
+        """
+
+        from ..evaluate import CaseInsensitiveDefaultDict
+        performances = CaseInsensitiveDefaultDict(list)
+
+        if verbose:
+            print('Evaluating {0} of algorithm {1}.'.format(
+                  ', '.join((m.upper() for m in measures)),
+                  self.__class__.__name__))
+            print()
+
+        predictions = self.test(testset, verbose=(verbose == 2))
+
+        # compute needed performance statistics
+        for measure in measures:
+            f = getattr(accuracy, measure.lower())
+            performances[measure].append(f(predictions, verbose=verbose))
+
+        return performances

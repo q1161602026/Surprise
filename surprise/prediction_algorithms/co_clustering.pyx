@@ -55,6 +55,16 @@ class CoClustering(AlgoBase):
         self.n_epochs = n_epochs
         self.verbose=verbose
 
+        self.cltr_u = None
+        self.cltr_i = None
+
+        self.user_mean = None
+        self.item_mean = None
+
+        self.avg_cltr_u = None
+        self.avg_cltr_i = None
+        self.avg_cocltr = None
+
     def train(self, trainset):
 
         # All this implementation was hugely inspired from MyMediaLite:

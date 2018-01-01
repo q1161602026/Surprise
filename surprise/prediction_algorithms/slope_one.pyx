@@ -40,6 +40,9 @@ class SlopeOne(AlgoBase):
     def __init__(self):
 
         AlgoBase.__init__(self)
+        self.freq = None
+        self.dev = None
+        self.user_mean = None
 
     def train(self, trainset):
 

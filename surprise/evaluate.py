@@ -65,7 +65,7 @@ def evaluate(algo, data, measures={'rmse', 'mae'}, with_dump=False, dump_dir=Non
 
         # train and test algorithm. Keep all rating predictions in a list
         algo.train(trainset)
-        predictions = algo.test(testset.build_raw_testset(), verbose=(verbose == 2))
+        predictions = algo.test(testset, verbose=(verbose == 2))
 
         # compute needed performance statistics
         for measure in measures:

@@ -805,8 +805,8 @@ class Trainset(Instances):
         if self._user_mean is None:
             self._user_mean = np.zeros(self.n_users)
 
-            for uid, ratings in self.ur.iteritems():
-                self._user_mean[uid] = np.mean([rating for (_, rating) in ratings])
+            for uiid, ratings in self.ur.iteritems():
+                self._user_mean[uiid] = np.mean([rating for (_, rating) in ratings])
 
         return self._user_mean
 
@@ -819,8 +819,8 @@ class Trainset(Instances):
 
             self._item_mean = np.zeros(self.n_items)
 
-            for iid, ratings in self.ir.iteritems():
-                self._item_mean[iid] = np.mean([rating for (_, rating) in ratings])
+            for iiid, ratings in self.ir.iteritems():
+                self._item_mean[iiid] = np.mean([rating for (_, rating) in ratings])
 
         return self._item_mean
 

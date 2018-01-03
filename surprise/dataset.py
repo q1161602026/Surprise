@@ -490,8 +490,17 @@ class Instances:
         self.ur = None
         self.ir = None
 
-        self.n_users = None
-        self.n_items = None
+        self._n_users = None
+        self._n_items = None
+        self._n_ratings = None
+
+        self._global_mean = None
+        self._user_mean = None
+        self._item_mean = None
+        self._user_std = None
+        self._item_std = None
+        self._user_count = None
+        self._item_count = None
 
         self._raw2inner_id_users = None
         self._raw2inner_id_items = None
@@ -499,6 +508,34 @@ class Instances:
         # are not always useful so we wait until we need them.
         self._inner2raw_id_users = None
         self._inner2raw_id_items = None
+
+    def all_ratings(self):
+        """Generator function to iterate over all ratings.
+
+        Yields:
+            A tuple ``(uiid, iiid, rating)`` where ids are inner ids (see
+            :ref:`this note <raw_inner_note>`).
+        """
+
+        for uiid, u_ratings in iteritems(self.ur):
+            for iiid, rating in u_ratings:
+                yield uiid, iiid, rating
+
+    def all_users(self):
+        """Generator function to iterate over all users.
+
+        Yields:
+            Inner id of users.
+        """
+        pass
+
+    def all_items(self):
+        """Generator function to iterate over all items.
+
+        Yields:
+            Inner id of items.
+        """
+        pass
 
     def knows_user(self, uiid):
         """Indicate if the user is part of the instances.
@@ -610,22 +647,6 @@ class Instances:
         except KeyError:
             raise ValueError(str(iiid) + ' is not a valid inner id.')
 
-    def all_users(self):
-        """Generator function to iterate over all users.
-
-        Yields:
-            Inner id of users.
-        """
-        pass
-
-    def all_items(self):
-        """Generator function to iterate over all items.
-
-        Yields:
-            Inner id of items.
-        """
-        pass
-
     @property
     def raw2inner_id_users(self):
         return self._raw2inner_id_users
@@ -650,6 +671,114 @@ class Instances:
 
         return self._inner2raw_id_items
 
+    @property
+    def n_users(self):
+        if self._n_users is None:
+            self._n_users = len(self.ur)
+        return self._n_users  # number of users
+
+    @property
+    def n_items(self):
+        if self._n_items is None:
+            self._n_items = len(self.ir)
+        return self._n_items  # number of items
+
+    @property
+    def n_ratings(self):
+        if self._n_ratings is None:
+            self._n_ratings = len(self.raw_rating)
+        return self._n_ratings  # number of ratings
+
+    @property
+    def global_mean(self):
+        """Return the mean of all ratings.
+
+        It's only computed once."""
+        if self._global_mean is None:
+            self._global_mean = np.mean([r for (_, _, r) in
+                                         self.all_ratings()])
+
+        return self._global_mean
+
+    @property
+    def user_mean(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_mean is None:
+            self._user_mean = np.zeros(self.n_users)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_mean[uiid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._user_mean
+
+    @property
+    def item_mean(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._item_mean is None:
+
+            self._item_mean = np.zeros(self.n_items)
+
+            for iiid, ratings in self.ir.iteritems():
+                self._item_mean[iiid] = np.mean([rating for (_, rating) in ratings])
+
+        return self._item_mean
+
+    @property
+    def user_std(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_std is None:
+            self._user_std = np.zeros(self.n_users)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_std[uiid] = np.std([rating for (_, rating) in ratings])
+
+        return self._user_std
+
+    @property
+    def item_std(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._item_std is None:
+            self._item_std = np.zeros(self.n_items)
+
+            for iiid, ratings in self.ir.iteritems():
+                self._item_std[iiid] = np.std([rating for (_, rating) in ratings])
+
+        return self._item_std
+
+    @property
+    def item_count(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._item_count is None:
+            self._item_count = np.zeros(self.n_items)
+
+            for iiid, ratings in self.ir.iteritems():
+                self._item_count[iiid] = len(ratings)
+
+        return self._item_count
+
+    @property
+    def user_count(self):
+        """Return the mean of item ratings.
+
+        It's only computed once."""
+        if self._user_count is None:
+            self._user_count = np.zeros(self.n_items)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_count[uiid] = len(ratings)
+
+        return self._user_count
+
 
 class Trainset(Instances):
     """A trainset contains all useful data that constitutes a training set.
@@ -667,12 +796,6 @@ class Trainset(Instances):
         ir(:obj:`defaultdict` of :obj:`list`): The items ratings. This is a
             dictionary containing lists of tuples of the form ``(user_inner_id,
             rating)``. The keys are item inner ids.
-        n_users: Total number of users :math:`|U|`.
-        n_items: Total number of items :math:`|I|`.
-        n_ratings: Total number of ratings :math:`|R_{train}|`.
-        rating_scale(tuple): The minimum and maximal rating of the rating
-            scale.
-        _global_mean: The mean of all ratings :math:`\\mu`.
     """
 
     def __init__(self, raw_trainset, rating_scale, offset):
@@ -706,14 +829,6 @@ class Trainset(Instances):
             self.ur[uiid].append((iiid, r))
             self.ir[iiid].append((uiid, r))
 
-        self.n_users = len(self.ur)  # number of users
-        self.n_items = len(self.ir)  # number of items
-        self.n_ratings = len(self.raw_rating)
-
-        self._global_mean = None
-        self._user_mean = None
-        self._item_mean = None
-
     def all_ratings(self):
         """Generator function to iterate over all ratings.
 
@@ -726,7 +841,7 @@ class Trainset(Instances):
             for iiid, rating in u_ratings:
                 yield uiid, iiid, rating
 
-    def build_rated_testset(self):
+    def build_raw_testset(self):
         """Return a list of ratings that can be used as a testset in the
         :meth:`test() <surprise.prediction_algorithms.algo_base.AlgoBase.test>`
         method.
@@ -786,44 +901,6 @@ class Trainset(Instances):
         """
         return range(self.n_items)
 
-    @property
-    def global_mean(self):
-        """Return the mean of all ratings.
-
-        It's only computed once."""
-        if self._global_mean is None:
-            self._global_mean = np.mean([r for (_, _, r) in
-                                         self.all_ratings()])
-
-        return self._global_mean
-
-    @property
-    def user_mean(self):
-        """Return the mean of user ratings.
-
-        It's only computed once."""
-        if self._user_mean is None:
-            self._user_mean = np.zeros(self.n_users)
-
-            for uiid, ratings in self.ur.iteritems():
-                self._user_mean[uiid] = np.mean([rating for (_, rating) in ratings])
-
-        return self._user_mean
-
-    @property
-    def item_mean(self):
-        """Return the mean of item ratings.
-
-        It's only computed once."""
-        if self._item_mean is None:
-
-            self._item_mean = np.zeros(self.n_items)
-
-            for iiid, ratings in self.ir.iteritems():
-                self._item_mean[iiid] = np.mean([rating for (_, rating) in ratings])
-
-        return self._item_mean
-
 
 class Testset(Instances):
 
@@ -860,26 +937,6 @@ class Testset(Instances):
             self.ur[uiid].append((iiid, r))
             self.ir[iiid].append((uiid, r))
 
-        self.n_users = len(self.ur)  # number of users
-        self.n_items = len(self.ir)  # number of items
-        self.n_ratings = len(raw_testset)
-
-        self._global_mean = None
-        self._user_mean = None
-        self._item_mean = None
-
-    def all_ratings(self):
-        """Generator function to iterate over all ratings.
-
-        Yields:
-            A tuple ``(uiid, iiid, rating)`` where ids are inner ids (see
-            :ref:`this note <raw_inner_note>`).
-        """
-
-        for uiid, u_ratings in iteritems(self.ur):
-            for iiid, rating in u_ratings:
-                yield uiid, iiid, rating
-
     def build_raw_testset(self):
         """Return a list of ratings that can be used as a testset in the
         :meth:`test() <surprise.prediction_algorithms.algo_base.AlgoBase.test>`
@@ -910,40 +967,4 @@ class Testset(Instances):
         """
         return (iiid for iiid in self.ir)
 
-    @property
-    def global_mean(self):
-        """Return the mean of all ratings.
 
-        It's only computed once."""
-        if self._global_mean is None:
-            self._global_mean = np.mean([r for (_, _, r) in
-                                         self.all_ratings()])
-
-        return self._global_mean
-
-    @property
-    def user_mean(self):
-        """Return the mean of user ratings.
-
-        It's only computed once."""
-        if self._user_mean is None:
-            self._user_mean = np.zeros(self.n_users)
-
-            for uid, ratings in self.ur.iteritems():
-                self._user_mean[uid] = np.mean([rating for (_, rating) in ratings])
-
-        return self._user_mean
-
-    @property
-    def item_mean(self):
-        """Return the mean of item ratings.
-
-        It's only computed once."""
-        if self._item_mean is None:
-
-            self._item_mean = np.zeros(self.n_items)
-
-            for iid, ratings in self.ir.iteritems():
-                self._item_mean[iid] = np.mean([rating for (_, rating) in ratings])
-
-        return self._item_mean

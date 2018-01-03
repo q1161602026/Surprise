@@ -48,7 +48,7 @@ def jaccard(n_x, yr, min_support):
 
     for y, y_ratings in iteritems(yr):
         for xi, ri in y_ratings:
-            freq[xi] += 1
+            freqi[xi] += 1
             for xj, rj in y_ratings:
                 freq[xi, xj] += 1
 
@@ -58,7 +58,7 @@ def jaccard(n_x, yr, min_support):
             if freq[xi, xj] < min_sprt:
                 sim[xi, xj] = 0
             else:
-                denum = freqi[xi] + freqi[xj] - freq[xj, xj]
+                denum = freqi[xi] + freqi[xj] - freq[xi, xj]
                 sim[xi, xj] = freq[xi, xj] / denum
 
             sim[xj, xi] = sim[xi, xj]
@@ -424,6 +424,118 @@ def cosine_adjusted(n_x, yr, min_support, y_mean):
                 freq[xi, xj] += 1
                 diff_i = (ri - y_avg)
                 diff_j = (rj - y_avg)
+                prods[xi, xj] += diff_i * diff_j
+                sq_diff_i[xi, xj] += diff_i**2
+                sq_diff_j[xi, xj] += diff_j**2
+
+    for xi in range(n_x):
+        sim[xi, xi] = 1
+        for xj in range(xi + 1, n_x):
+            if freq[xi, xj] < min_sprt:
+                continue
+            else:
+                denum = np.sqrt(sq_diff_i[xi, xj] * sq_diff_j[xi, xj])
+                if denum == 0:
+                    sim[xi, xj] = 0
+                else:
+                    sim[xi, xj] = prods[xi, xj] / denum
+            sim[xj, xi] = sim[xi, xj]
+
+    return sim
+
+def test_sim(n_x, yr, min_support, y_mean, x_mean, y_std, x_std):
+
+    # number of common ys
+    cdef np.ndarray[np.int_t, ndim=2] freq
+    # sum (r_xy - b_xy) * (r_x'y - b_x'y) for common ys
+    cdef np.ndarray[np.double_t, ndim=2] prods
+    # sum (r_xy - b_xy)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_i
+    # sum (r_x'y - b_x'y)**2 for common ys
+    cdef np.ndarray[np.double_t, ndim=2] sq_diff_j
+    # the similarity matrix
+    cdef np.ndarray[np.double_t, ndim=2] sim
+
+    cdef np.ndarray[np.double_t] y_mean_
+    cdef np.ndarray[np.double_t] x_mean_
+
+    cdef np.ndarray[np.double_t] y_std_
+    cdef np.ndarray[np.double_t] x_std_
+
+    cdef int xi, xj
+    cdef int min_sprt = min_support
+
+    freq = np.zeros((n_x, n_x), np.int)
+    prods = np.zeros((n_x, n_x), np.double)
+    sq_diff_i = np.zeros((n_x, n_x), np.double)
+    sq_diff_j = np.zeros((n_x, n_x), np.double)
+    sim = np.zeros((n_x, n_x), np.double)
+
+    y_mean_ = y_mean
+    x_mean_ = x_mean
+    y_std_ = y_std
+    x_std_ = x_std
+
+
+    for y, y_ratings in iteritems(yr):
+        y_avg = y_mean_[y]
+        y_sd = y_std_[y]
+        for xi, ri in y_ratings:
+            xi_avg = x_mean_[xi]
+            xi_sd = x_std_[xi]
+            for xj, rj in y_ratings:
+                xj_avg = x_mean_[xj]
+                xj_sd = x_std_[xj]
+                freq[xi, xj] += 1
+
+                # 0.7844 0.9868
+                # diff_i = ((ri + rj)/2 - xi_avg)
+                # diff_j = ((ri + rj)/2 - xj_avg)
+
+                # 0.7819 0.9830
+                # diff_i = ((ri + rj + y_avg)/3 - xi_avg)
+                # diff_j = ((ri + rj + y_avg)/3 - xj_avg)
+
+                # 0.7766 0.9866
+                # diff_i = ((xi_avg + xj_avg + y_avg)/3 - ri)
+                # diff_j = ((xi_avg + xj_avg + y_avg)/3 - rj)
+
+                # 0.7875 0.9860
+                # diff_i = ((xi_avg + xj_avg + ri)/3 - y_avg)
+                # diff_j = ((xi_avg + xj_avg + rj)/3 - y_avg)
+
+                # 0.7857 0.9971
+                # diff_i = (xj_avg - xi_avg + ri - y_avg)
+                # diff_j = (xi_avg - xj_avg + rj - y_avg)
+
+                # 0.7921 0.9989
+                diff_i = (xj_avg - xi_avg + rj)
+                diff_j = (xi_avg - xj_avg + ri)
+
+                # 0.7885 0.9926
+                # diff_i = ((ri + rj) - (xi_avg + y_avg))
+                # diff_j = ((ri + rj) - (xj_avg + y_avg))
+
+                # 0.8028 1.0087
+                # diff_i = ((ri - rj) - (xi_avg - y_avg))
+                # diff_j = ((ri - rj) - (xj_avg - y_avg))
+
+                # 0.8028 1.0087
+                # diff_i = ((ri - rj) + (xi_avg - y_avg))
+                # diff_j = ((ri - rj) + (xj_avg - y_avg))
+
+                # 0.7933 0.9983
+                # diff_i = (ri - y_avg)
+                # diff_j = ((rj + ri)/2 - y_avg)
+
+                # 0.7887 0.9911
+                # diff_i = ((ri + y_avg)/2 - xi_avg)
+                # diff_j = ((ri + y_avg)/2 - xj_avg)
+
+                # 0.7864 0.9980
+                # diff_i = ((xi_avg + y_avg)/2 - ri)
+                # diff_j = ((xj_avg + y_avg)/2 - rj)
+
                 prods[xi, xj] += diff_i * diff_j
                 sq_diff_i[xi, xj] += diff_i**2
                 sq_diff_j[xi, xj] += diff_j**2

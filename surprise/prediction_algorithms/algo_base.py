@@ -51,7 +51,6 @@ class AlgoBase:
                 set, as returned by the :meth:`folds
                 <surprise.dataset.Dataset.folds>` method.
         """
-
         self.trainset = trainset
         # (re) Initialise baselines
         self.bu = None
@@ -59,7 +58,7 @@ class AlgoBase:
         self.sim = None
         self.k_nearest_neighbors = None
 
-    def estimate(self, iuid, iiid):
+    def estimate(self, uiid, iiid):
         pass
 
     def predict(self, urid, irid, r_ui=None, clip=True, verbose=False):
@@ -218,7 +217,9 @@ class AlgoBase:
                              'msd': sims.msd,
                              'pearson': sims.pearson,
                              'pearson_baseline': sims.pearson_baseline,
-                             'cosine_adjusted': sims.cosine_adjusted}
+                             'cosine_adjusted': sims.cosine_adjusted,
+                             'test_sim': sims.test_sim
+                             }
 
         if self.sim_options['user_based']:
             n_x, yr = self.trainset.n_users, self.trainset.ir
@@ -256,11 +257,25 @@ class AlgoBase:
 
             args += [y_mean]
 
+        elif name == 'test_sim':
+            if self.sim_options['user_based']:
+                y_mean = self.trainset.item_mean
+                x_mean = self.trainset.user_mean
+                y_std = self.trainset.item_std
+                x_std = self.trainset.user_std
+            else:
+                y_mean = self.trainset.user_mean
+                x_mean = self.trainset.item_mean
+                y_std = self.trainset.user_std
+                x_std = self.trainset.item_std
+
+            args += [y_mean, x_mean, y_std, x_std]
+
         try:
             print('Computing the {0} similarity matrix...'.format(name))
-            self.sim = construction_func[name](*args)
+            sim = construction_func[name](*args)
             print('Done computing similarity matrix.')
-            return self.sim
+            return sim
         except KeyError:
             raise NameError('Wrong sim name ' + name + '. Allowed values ' +
                             'are ' + ', '.join(construction_func.keys()) + '.')
@@ -286,13 +301,16 @@ class AlgoBase:
             The list of the ``k`` (inner) ids of the closest users (or items)
             to ``iid``.
         """
+        if self.k_nearest_neighbors is None:
+            self.k_nearest_neighbors = {}
+
         if iid in self.k_nearest_neighbors:
             return self.k_nearest_neighbors[iid]
+
         if self.sim_options['user_based']:
             all_instances = self.trainset.all_users
         else:
             all_instances = self.trainset.all_items
-
         others = [(x, self.sim[iid, x]) for x in all_instances() if x != iid and self.sim[iid, x] != 0]
         others.sort(key=lambda tple: tple[1], reverse=True)
         k_nearest_neighbors = [j for (j, _) in others[:k]]

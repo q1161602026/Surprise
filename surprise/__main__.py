@@ -18,6 +18,9 @@ from surprise.prediction_algorithms import SVD
 from surprise.prediction_algorithms import SVDpp
 from surprise.prediction_algorithms import NMF
 from surprise.prediction_algorithms import SlopeOne
+from surprise.prediction_algorithms import WeightedSlopeOne
+from surprise.prediction_algorithms import BiPolarSlopeOne
+
 from surprise.prediction_algorithms import CoClustering
 import surprise.dataset as dataset
 from surprise.dataset import Dataset
@@ -59,6 +62,8 @@ def main():
         'SVDpp': SVDpp,
         'NMF': NMF,
         'SlopeOne': SlopeOne,
+        'WeightedSlopeOne': WeightedSlopeOne,
+        'BiPolarSlopeOne':BiPolarSlopeOne,
         'CoClustering': CoClustering,
     }
 

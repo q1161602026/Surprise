@@ -113,6 +113,9 @@ class SVD(AlgoBase):
                  reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None,
                  verbose=False):
 
+
+        AlgoBase.__init__(self)
+
         self.n_factors = n_factors
         self.n_epochs = n_epochs
         self.biased = biased
@@ -120,6 +123,8 @@ class SVD(AlgoBase):
         self.init_std_dev = init_std_dev
         self.lr_bu = lr_bu if lr_bu is not None else lr_all
         self.lr_bi = lr_bi if lr_bi is not None else lr_all
+        self.pu = None
+        self.qi = None
         self.lr_pu = lr_pu if lr_pu is not None else lr_all
         self.lr_qi = lr_qi if lr_qi is not None else lr_all
         self.reg_bu = reg_bu if reg_bu is not None else reg_all
@@ -128,7 +133,6 @@ class SVD(AlgoBase):
         self.reg_qi = reg_qi if reg_qi is not None else reg_all
         self.verbose = verbose
 
-        AlgoBase.__init__(self)
 
     def train(self, trainset):
 

@@ -208,15 +208,14 @@ class SVD(AlgoBase):
         for current_epoch in range(self.n_epochs):
             if self.verbose:
                 print("Processing epoch {}".format(current_epoch))
-            for u, i, r in trainset.all_ratings():
 
-                # compute current error
-                dot = 0  # <q_i, p_u>
+            if self.biased:
 
-                # update factors
-                if self.biased:
+                for u, i, r in trainset.all_ratings():
 
                     est = global_mean + bu[u] + bi[i]
+
+                    dot = 0
 
                     for f in range(self.n_factors):
                         dot += (qi[i, f] * pu[u, f] - qi[i, f] ** 2 - pu[u, f] ** 2)
@@ -232,7 +231,12 @@ class SVD(AlgoBase):
                         qif = qi[i, f]
                         pu[u, f] += lr_pu * (err * (qif - 2 * puf) - reg_pu * puf)
                         qi[i, f] += lr_qi * (err * (puf - 2 * qif) - reg_qi * qif)
-                else:
+
+            else:
+
+                for u, i, r in trainset.all_ratings():
+
+                    dot = 0
 
                     for f in range(self.n_factors):
                         dot += qi[i, f] * pu[u, f]

@@ -28,7 +28,7 @@ from . import dump
 
 __all__ = ['AlgoBase', 'NormalPredictor', 'BaselineOnly', 'KNNBasic',
            'KNNWithMeans', 'KNNBaseline', 'SVD', 'SVDpp', 'NMF', 'SlopeOne',
-           'WeightedSlopeOne','BiPolarSlopeOne'
+           'WeightedSlopeOne', 'BiPolarSlopeOne',
            'CoClustering', 'PredictionImpossible', 'Prediction', 'Dataset',
            'Reader', 'Trainset', 'evaluate', 'print_perf', 'GridSearch',
            'dump', 'KNNWithZScore']

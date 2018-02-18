@@ -475,8 +475,8 @@ class Instances:
         ir(:obj:`defaultdict` of :obj:`list`): The items ratings. This is a
             dictionary containing lists of tuples of the form ``(user_inner_id,
             rating)``. The keys are item inner ids.
-        n_users: Total number of users :math:`|U|`.
-        n_items: Total number of items :math:`|I|`.
+        _n_users: Total number of users :math:`|U|`.
+        _n_items: Total number of items :math:`|I|`.
         rating_scale(tuple): The minimum and maximal rating of the rating
             scale.
     """
@@ -501,6 +501,11 @@ class Instances:
         self._item_std = None
         self._user_count = None
         self._item_count = None
+
+        self._user_items = None
+        self._user_max = None
+        self._user_min = None
+        self._user_range = None
 
         self._raw2inner_id_users = None
         self._raw2inner_id_items = None
@@ -527,7 +532,7 @@ class Instances:
         Yields:
             Inner id of users.
         """
-        pass
+        return range(self.n_users)
 
     def all_items(self):
         """Generator function to iterate over all items.
@@ -535,7 +540,7 @@ class Instances:
         Yields:
             Inner id of items.
         """
-        pass
+        return range(self.n_items)
 
     def knows_user(self, uiid):
         """Indicate if the user is part of the instances.
@@ -714,6 +719,45 @@ class Instances:
         return self._user_mean
 
     @property
+    def user_max(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_max is None:
+            self._user_max = np.zeros(self.n_users)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_max[uiid] = np.max([rating for (_, rating) in ratings])
+
+        return self._user_max
+
+    @property
+    def user_min(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_min is None:
+            self._user_min = np.zeros(self.n_users)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_min[uiid] = np.min([rating for (_, rating) in ratings])
+
+        return self._user_min
+
+    @property
+    def user_range(self):
+        """Return the mean of user ratings.
+
+        It's only computed once."""
+        if self._user_range is None:
+            self._user_range = np.zeros(self.n_users)
+
+            for uiid, ratings in self.ur.iteritems():
+                self._user_range[uiid] = self.user_max[uiid] - self.user_min[uiid] + 1
+
+        return self._user_range
+
+    @property
     def item_mean(self):
         """Return the mean of item ratings.
 
@@ -754,8 +798,18 @@ class Instances:
         return self._item_std
 
     @property
+    def user_items(self):
+        if self._user_items is None:
+            self._user_items = {}
+
+            for u in self.all_users():
+                self._user_items[u] = [j for (j, _) in self.ur[u]]
+
+        return self._user_items
+
+    @property
     def item_count(self):
-        """Return the mean of item ratings.
+        """Return the count of item ratings.
 
         It's only computed once."""
         if self._item_count is None:
@@ -768,7 +822,7 @@ class Instances:
 
     @property
     def user_count(self):
-        """Return the mean of item ratings.
+        """Return the count of user ratings.
 
         It's only computed once."""
         if self._user_count is None:
@@ -829,18 +883,6 @@ class Trainset(Instances):
             self.ur[uiid].append((iiid, r))
             self.ir[iiid].append((uiid, r))
 
-    def all_ratings(self):
-        """Generator function to iterate over all ratings.
-
-        Yields:
-            A tuple ``(uiid, iiid, rating)`` where ids are inner ids (see
-            :ref:`this note <raw_inner_note>`).
-        """
-
-        for uiid, u_ratings in iteritems(self.ur):
-            for iiid, rating in u_ratings:
-                yield uiid, iiid, rating
-
     def build_raw_testset(self):
         """Return a list of ratings that can be used as a testset in the
         :meth:`test() <surprise.prediction_algorithms.algo_base.AlgoBase.test>`
@@ -884,22 +926,6 @@ class Trainset(Instances):
                              i in self.all_items() if
                              i not in user_items]
         return anti_testset
-
-    def all_users(self):
-        """Generator function to iterate over all users.
-
-        Yields:
-            Inner id of users.
-        """
-        return range(self.n_users)
-
-    def all_items(self):
-        """Generator function to iterate over all items.
-
-        Yields:
-            Inner id of items.
-        """
-        return range(self.n_items)
 
 
 class Testset(Instances):
@@ -966,5 +992,3 @@ class Testset(Instances):
             Inner id of items.
         """
         return (iiid for iiid in self.ir)
-
-

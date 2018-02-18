@@ -46,7 +46,7 @@ class CoClustering(AlgoBase):
 
     """
 
-    def __init__(self, n_cltr_u=3, n_cltr_i=3, n_epochs=20, verbose=False):
+    def __init__(self, n_cltr_u=3, n_cltr_i=3, n_epochs=20, seed = 0, verbose=False):
 
         AlgoBase.__init__(self)
 
@@ -64,6 +64,7 @@ class CoClustering(AlgoBase):
         self.avg_cltr_u = None
         self.avg_cltr_i = None
         self.avg_cocltr = None
+        self.seed = seed
 
     def train(self, trainset):
 
@@ -71,10 +72,8 @@ class CoClustering(AlgoBase):
         # https://github.com/zenogantner/MyMediaLite/blob/master/src/MyMediaLite/RatingPrediction/CoClustering.cs
 
         AlgoBase.train(self, trainset)
-
-        # User and item means
-        cdef np.ndarray[np.double_t] user_mean
-        cdef np.ndarray[np.double_t] item_mean
+        self.user_mean = self.trainset.user_mean
+        self.item_mean = self.trainset.item_mean
 
         # User and items clusters
         cdef np.ndarray[np.int_t] cltr_u
@@ -90,16 +89,9 @@ class CoClustering(AlgoBase):
         cdef double est
 
         # Randomly assign users and items to intial clusters
+        np.random.seed(self.seed)
         cltr_u = np.random.randint(self.n_cltr_u, size=trainset.n_users)
         cltr_i = np.random.randint(self.n_cltr_i, size=trainset.n_items)
-
-        # Compute user and item means
-        user_mean = np.zeros(self.trainset.n_users, np.double)
-        item_mean = np.zeros(self.trainset.n_items, np.double)
-        for u in trainset.all_users():
-            user_mean[u] = np.mean([r for (_, r) in trainset.ur[u]])
-        for i in trainset.all_items():
-            item_mean[i] = np.mean([r for (_, r) in trainset.ir[i]])
 
         # Optimization loop. This could be optimized a bit by checking if
         # clusters where effectively updated and early stop if they did not.
@@ -119,8 +111,8 @@ class CoClustering(AlgoBase):
                     for i, r in self.trainset.ur[u]:
                         ic = cltr_i[i]
                         est = (avg_cocltr[uc, ic] +
-                               user_mean[u] - avg_cltr_u[uc] +
-                               item_mean[i] - avg_cltr_i[ic])
+                               self.user_mean[u] - avg_cltr_u[uc] +
+                               self.item_mean[i] - avg_cltr_i[ic])
                         errors[uc] += (r - est)**2
                 cltr_u[u] = np.argmin(errors)
 
@@ -132,8 +124,8 @@ class CoClustering(AlgoBase):
                     for u, r in self.trainset.ir[i]:
                         uc = cltr_u[u]
                         est = (avg_cocltr[uc, ic] +
-                               user_mean[u] - avg_cltr_u[uc] +
-                               item_mean[i] - avg_cltr_i[ic])
+                               self.user_mean[u] - avg_cltr_u[uc] +
+                               self.item_mean[i] - avg_cltr_i[ic])
                         errors[ic] += (r - est)**2
                 cltr_i[i] = np.argmin(errors)
 
@@ -143,9 +135,6 @@ class CoClustering(AlgoBase):
         # Set cdefed arrays as attributes as they are needed for prediction
         self.cltr_u = cltr_u
         self.cltr_i = cltr_i
-
-        self.user_mean = user_mean
-        self.item_mean = item_mean
 
         self.avg_cltr_u = avg_cltr_u
         self.avg_cltr_i = avg_cltr_i

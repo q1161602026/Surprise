@@ -9,9 +9,17 @@ from __future__ import (absolute_import, division, print_function,
 cimport numpy as np  # noqa
 import numpy as np
 from six.moves import range
+from tqdm import tqdm
+import math
+
+
 
 from .algo_base import AlgoBase
 from .predictions import PredictionImpossible
+
+
+def sigmoid(x, w, b):
+    return 1.0 / (1 + math.exp(-np.dot(x, w) - b))
 
 
 class SVD(AlgoBase):
@@ -110,8 +118,11 @@ class SVD(AlgoBase):
     def __init__(self, n_factors=100, n_epochs=20, biased=True, init_mean=0,
                  init_std_dev=.1, lr_all=.005,
                  reg_all=.02, lr_bu=None, lr_bi=None, lr_pu=None, lr_qi=None,
-                 reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None,
+                 reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None, seed=0,
                  verbose=False):
+
+
+        AlgoBase.__init__(self)
 
         self.n_factors = n_factors
         self.n_epochs = n_epochs
@@ -120,15 +131,17 @@ class SVD(AlgoBase):
         self.init_std_dev = init_std_dev
         self.lr_bu = lr_bu if lr_bu is not None else lr_all
         self.lr_bi = lr_bi if lr_bi is not None else lr_all
+        self.pu = None
+        self.qi = None
         self.lr_pu = lr_pu if lr_pu is not None else lr_all
         self.lr_qi = lr_qi if lr_qi is not None else lr_all
         self.reg_bu = reg_bu if reg_bu is not None else reg_all
         self.reg_bi = reg_bi if reg_bi is not None else reg_all
         self.reg_pu = reg_pu if reg_pu is not None else reg_all
         self.reg_qi = reg_qi if reg_qi is not None else reg_all
+        self.seed = seed
         self.verbose = verbose
 
-        AlgoBase.__init__(self)
 
     def train(self, trainset):
 
@@ -178,8 +191,16 @@ class SVD(AlgoBase):
         # item factors
         cdef np.ndarray[np.double_t, ndim=2] qi
 
+        cdef np.ndarray[np.double_t, ndim=1] pqerr
+
+        cdef np.ndarray[np.double_t, ndim=1] w
+
+        cdef double b
+
+        cdef double act
+
         cdef int u, i, f
-        cdef double r, err, dot, puf, qif
+        cdef double r, est, est1, est2, est3, dot1, dot2, err, err1, err2, err3, err4, puf, qif
         cdef double global_mean = self.trainset.global_mean
 
         cdef double lr_bu = self.lr_bu
@@ -192,6 +213,7 @@ class SVD(AlgoBase):
         cdef double reg_pu = self.reg_pu
         cdef double reg_qi = self.reg_qi
 
+        np.random.seed(self.seed)
         bu = np.zeros(trainset.n_users, np.double)
         bi = np.zeros(trainset.n_items, np.double)
         pu = np.random.normal(self.init_mean, self.init_std_dev,
@@ -199,36 +221,87 @@ class SVD(AlgoBase):
         qi = np.random.normal(self.init_mean, self.init_std_dev,
                               (trainset.n_items, self.n_factors))
 
-        if not self.biased:
-            global_mean = 0
+        pqerr = np.zeros(self.n_factors, np.double)
 
-        for current_epoch in range(self.n_epochs):
+        w = np.random.normal(self.init_mean, self.init_std_dev,
+                              self.n_factors)
+
+        b = 0
+
+        for current_epoch in tqdm(range(self.n_epochs)):
             if self.verbose:
                 print("Processing epoch {}".format(current_epoch))
-            for u, i, r in trainset.all_ratings():
 
-                # compute current error
-                dot = 0  # <q_i, p_u>
-                for f in range(self.n_factors):
-                    dot += qi[i, f] * pu[u, f]
-                err = r - (global_mean + bu[u] + bi[i] + dot)
+            if self.biased:
 
-                # update biases
-                if self.biased:
-                    bu[u] += lr_bu * (err - reg_bu * bu[u])
-                    bi[i] += lr_bi * (err - reg_bi * bi[i])
+                for u, i, r in trainset.all_ratings():
 
-                # update factors
-                for f in range(self.n_factors):
-                    puf = pu[u, f]
-                    qif = qi[i, f]
-                    pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
-                    qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
+                    est1 = global_mean + bu[u] + bi[i]
+                    est2 = 0
+                    est3 = 0
+
+
+                    dot1 = 0
+                    dot2 = 0
+
+                    for f in range(self.n_factors):
+                        qif = qi[i, f]
+                        puf = pu[u, f]
+                        dot1 += qif * puf
+                        dot2 += - qif ** 2 - puf ** 2
+                        pqerr[f] = puf - qif
+
+                    act = sigmoid(pqerr, w, b)
+                    est1 += dot1 + dot2
+                    est2 += dot1
+                    est3 += dot1 + act - 0.5
+
+
+                    err1 = r - est1
+                    err2 = r - est2
+                    err3 = est1 - est2
+
+                    err4 = r - est3
+
+                    bu[u] += lr_bu * (err1 - err3 - reg_bu * bu[u])
+                    bi[i] += lr_bi * (err1 - err3 - reg_bi * bi[i])
+
+                    for f in range(self.n_factors):
+
+                        puf = pu[u, f]
+                        qif = qi[i, f]
+
+                        pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + err3 * (2 * puf) - reg_pu * puf)
+                        qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + err3 * (2 * qif) - reg_qi * qif)
+
+                        w[f] += lr_bu * (err4 * (1 - act) * act * pqerr[f] - reg_bu * w[f])
+
+
+                    b += lr_bu * (err4 * (1 - act) * act)
+
+            else:
+
+                for u, i, r in trainset.all_ratings():
+
+                    est = 0
+
+                    for f in range(self.n_factors):
+                        est += qi[i, f] * pu[u, f]
+
+                    err = r - est
+
+                    for f in range(self.n_factors):
+                        puf = pu[u, f]
+                        qif = qi[i, f]
+                        pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
+                        qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
 
         self.bu = bu
         self.bi = bi
         self.pu = pu
         self.qi = qi
+        self.b = b
+        self.w = w
 
     def estimate(self, u, i):
         # Should we cythonize this as well?
@@ -237,22 +310,29 @@ class SVD(AlgoBase):
         known_item = self.trainset.knows_item(i)
 
         if self.biased:
-            est = self.trainset.global_mean
 
-            if known_user:
-                est += self.bu[u]
-
-            if known_item:
-                est += self.bi[i]
+            est = 0
 
             if known_user and known_item:
-                est += np.dot(self.qi[i], self.pu[u])
+
+                est += np.dot(self.qi[i], self.pu[u]) + sigmoid(self.pu[u] - self.qi[i], self.w, self.b) - 0.5
+
+            elif known_user:
+
+                est += self.bu[u] - np.dot(self.pu[u], self.pu[u])
+
+            elif known_item:
+
+                est += self.bi[i] - np.dot(self.qi[i], self.qi[i])
 
         else:
             if known_user and known_item:
+
                 est = np.dot(self.qi[i], self.pu[u])
+
             else:
-                raise PredictionImpossible('User and item are unkown.')
+
+                raise PredictionImpossible('User and item are unknown.')
 
         return est
 
@@ -394,13 +474,13 @@ class SVDpp(AlgoBase):
                               (trainset.n_items, self.n_factors))
         u_impl_fdb = np.zeros(self.n_factors, np.double)
 
-        for current_epoch in range(self.n_epochs):
+        for current_epoch in tqdm(range(self.n_epochs)):
             if self.verbose:
                 print(" processing epoch {}".format(current_epoch))
             for u, i, r in trainset.all_ratings():
 
                 # items rated by u. This is COSTLY
-                Iu = [j for (j, _) in trainset.ur[u]]
+                Iu = self.trainset.user_items[u]
                 sqrt_Iu = np.sqrt(len(Iu))
 
                 # compute user implicit feedback
@@ -532,11 +612,13 @@ class NMF(AlgoBase):
 
     def __init__(self, n_factors=15, n_epochs=50, biased=False, reg_pu=.06,
                  reg_qi=.06, reg_bu=.02, reg_bi=.02, lr_bu=.005, lr_bi=.005,
-                 init_low=0, init_high=1, verbose=False):
+                 init_low=0, init_high=1, seed = 0, verbose=False):
 
         self.n_factors = n_factors
         self.n_epochs = n_epochs
         self.biased = biased
+        self.pu = None
+        self.qi = None
         self.reg_pu = reg_pu
         self.reg_qi = reg_qi
         self.lr_bu = lr_bu
@@ -545,6 +627,7 @@ class NMF(AlgoBase):
         self.reg_bi = reg_bi
         self.init_low = init_low
         self.init_high = init_high
+        self.seed = seed
         self.verbose = verbose
 
         if self.init_low < 0:
@@ -583,6 +666,7 @@ class NMF(AlgoBase):
         cdef double lr_bi = self.lr_bi
         cdef double global_mean = self.trainset.global_mean
 
+        np.random.seed(self.seed)
         # Randomly initialize user and item factors
         pu = np.random.uniform(self.init_low, self.init_high,
                                size=(trainset.n_users, self.n_factors))
@@ -669,6 +753,6 @@ class NMF(AlgoBase):
             if known_user and known_item:
                 est = np.dot(self.qi[i], self.pu[u])
             else:
-                raise PredictionImpossible('User and item are unkown.')
+                raise PredictionImpossible('User and item are unknown.')
 
         return est

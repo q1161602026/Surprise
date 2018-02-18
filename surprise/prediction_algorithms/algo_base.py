@@ -218,7 +218,6 @@ class AlgoBase:
                              'pearson': sims.pearson,
                              'pearson_baseline': sims.pearson_baseline,
                              'cosine_adjusted': sims.cosine_adjusted,
-                             'test_sim': sims.test_sim
                              }
 
         if self.sim_options['user_based']:
@@ -256,20 +255,6 @@ class AlgoBase:
                 y_mean = self.trainset.user_mean
 
             args += [y_mean]
-
-        elif name == 'test_sim':
-            if self.sim_options['user_based']:
-                y_mean = self.trainset.item_mean
-                x_mean = self.trainset.user_mean
-                y_std = self.trainset.item_std
-                x_std = self.trainset.user_std
-            else:
-                y_mean = self.trainset.user_mean
-                x_mean = self.trainset.item_mean
-                y_std = self.trainset.user_std
-                x_std = self.trainset.item_std
-
-            args += [y_mean, x_mean, y_std, x_std]
 
         try:
             print('Computing the {0} similarity matrix...'.format(name))

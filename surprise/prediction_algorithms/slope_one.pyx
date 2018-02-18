@@ -151,6 +151,7 @@ class WeightedSlopeOne(AlgoBase):
         return est
 
 class BiPolarSlopeOne(AlgoBase):
+    # applying my Soft Bound Bi-Polar Slope One algorithm instead
 
     def __init__(self):
 
@@ -170,7 +171,9 @@ class BiPolarSlopeOne(AlgoBase):
         # Deviation from item i to item j: mean(r_ui - r_uj for u in U_ij)
         cdef np.ndarray[np.double_t, ndim=2] dev
 
-        cdef int u, i, j, r_ui, r_uj
+        cdef int u, i, j, r_ui, r_uj, minus
+
+        cdef float u_mean, i_mean, j_mean
 
         AlgoBase.train(self, trainset)
 
@@ -186,14 +189,15 @@ class BiPolarSlopeOne(AlgoBase):
             u_mean = self.trainset.user_mean[u]
 
             for i, r_ui in u_ratings:
+                i_mean = self.trainset.item_mean[i]
                 for j, r_uj in u_ratings:
+                    j_mean = self.trainset.item_mean[j]
                     minus = r_ui - r_uj
-
-                    if r_ui < u_mean and r_uj < u_mean:
+                    if r_ui <= (u_mean + i_mean) / 2 + 1 and r_uj <= (u_mean + j_mean) / 2 + 1:
                         dev[i, j] += minus
                         freq[i, j] += 1
 
-                    elif r_ui > u_mean and r_uj > u_mean:
+                    elif r_ui >= (u_mean + i_mean) / 2 - 1  and r_uj >= (u_mean + j_mean) / 2 - 1:
                         dev[i, j] += minus
                         freq[i, j] += 1
 
@@ -208,13 +212,15 @@ class BiPolarSlopeOne(AlgoBase):
         value = dict((j, rating) for j, rating in self.trainset.ur[uiid])
 
         user_mean = self.trainset.user_mean[uiid]
+        item_mean = self.trainset.item_mean[iiid]
+
 
         Ri = [j for (j, _) in self.trainset.ur[uiid] if self.freq[iiid, j] > 0]
 
-        est = user_mean
+        est = (user_mean + item_mean) / 2
 
         if Ri:
-            num = sum(self.dev[iiid, j] +self.freq[iiid, j] * value[j] for j in Ri)
+            num = sum(self.dev[iiid, j] + self.freq[iiid, j] * value[j] for j in Ri)
             denom = sum(self.freq[iiid, j] for j in Ri)
             est = num / denom
 

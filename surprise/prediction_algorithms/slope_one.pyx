@@ -173,6 +173,79 @@ class BiPolarSlopeOne(AlgoBase):
 
         cdef int u, i, j, r_ui, r_uj, minus
 
+        cdef float u_mean
+
+        AlgoBase.train(self, trainset)
+
+        n_items = trainset.n_items
+
+        freq = np.zeros((n_items, n_items), np.int)
+
+        dev = np.zeros((n_items, n_items), np.double)
+
+        # Computation of freq and dev arrays.
+        for u, u_ratings in iteritems(trainset.ur):
+
+            u_mean = self.trainset.user_mean[u]
+
+            for i, r_ui in u_ratings:
+                for j, r_uj in u_ratings:
+                    minus = r_ui - r_uj
+
+                    if r_ui < u_mean and r_uj < u_mean:
+                        dev[i, j] += minus
+                        freq[i, j] += 1
+
+                    elif r_ui > u_mean and r_uj > u_mean:
+                        dev[i, j] += minus
+                        freq[i, j] += 1
+
+        self.freq = freq
+        self.dev = dev
+
+    def estimate(self, uiid, iiid):
+
+        if not (self.trainset.knows_user(uiid) and self.trainset.knows_item(iiid)):
+            raise PredictionImpossible('User and/or item is unkown.')
+
+        value = dict((j, rating) for j, rating in self.trainset.ur[uiid])
+
+        user_mean = self.trainset.user_mean[uiid]
+
+        Ri = [j for (j, _) in self.trainset.ur[uiid] if self.freq[iiid, j] > 0]
+
+        est = user_mean
+
+        if Ri:
+            num = sum(self.dev[iiid, j] + self.freq[iiid, j] * value[j] for j in Ri)
+            denom = sum(self.freq[iiid, j] for j in Ri)
+            est = num / denom
+
+        return est
+
+class SoftBoundBiPolarSlopeOne(AlgoBase):
+    # applying my Soft Bound Bi-Polar Slope One algorithm instead
+
+    def __init__(self):
+
+        AlgoBase.__init__(self)
+        self.freq = None
+        self.dev = None
+
+    def train(self, trainset):
+
+        AlgoBase.train(self, trainset)
+
+        cdef int n_items
+
+        # Number of users having rated items i and j: |U_ij|
+        cdef np.ndarray[np.int_t, ndim=2] freq
+
+        # Deviation from item i to item j: mean(r_ui - r_uj for u in U_ij)
+        cdef np.ndarray[np.double_t, ndim=2] dev
+
+        cdef int u, i, j, r_ui, r_uj, minus
+
         cdef float u_mean, i_mean, j_mean
 
         AlgoBase.train(self, trainset)

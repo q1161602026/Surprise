@@ -20,6 +20,8 @@ from surprise.prediction_algorithms import NMF
 from surprise.prediction_algorithms import SlopeOne
 from surprise.prediction_algorithms import WeightedSlopeOne
 from surprise.prediction_algorithms import BiPolarSlopeOne
+from surprise.prediction_algorithms import CoClusteringRegression
+from surprise.prediction_algorithms import SoftBoundBiPolarSlopeOne
 
 from surprise.prediction_algorithms import CoClustering
 import surprise.dataset as dataset
@@ -63,8 +65,10 @@ def main():
         'NMF': NMF,
         'SlopeOne': SlopeOne,
         'WeightedSlopeOne': WeightedSlopeOne,
-        'BiPolarSlopeOne':BiPolarSlopeOne,
+        'BiPolarSlopeOne': BiPolarSlopeOne,
         'CoClustering': CoClustering,
+        'CoClusteringRegression': CoClusteringRegression,
+        'SoftBoundBiPolarSlopeOne': SoftBoundBiPolarSlopeOne
     }
 
     parser.add_argument('-algo', type=str,

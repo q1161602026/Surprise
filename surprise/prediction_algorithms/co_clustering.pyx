@@ -258,7 +258,7 @@ class CoClustering(AlgoBase):
 
 class CoClusteringRegression(AlgoBase):
 
-    def __init__(self, cltr_u_n=3, cltr_i_n=3, n_epochs=20, lr=0.005, seed=0, verbose=False):
+    def __init__(self, cltr_u_n=3, cltr_i_n=3, n_epochs=20, lr=0.005, reg1=0.02, reg2=0.02, seed=0, verbose=False):
 
         AlgoBase.__init__(self)
 
@@ -285,6 +285,9 @@ class CoClusteringRegression(AlgoBase):
 
         self.lr = lr
 
+        self.reg1 = reg1
+        self.reg2 = reg2
+
     def train(self, trainset):
 
         # All this implementation was hugely inspired from MyMediaLite:
@@ -310,9 +313,11 @@ class CoClusteringRegression(AlgoBase):
 
         cdef np.ndarray[np.double_t] errors
         cdef int u, i, r, uc, ic
-        cdef double est, w1, w2, lr
+        cdef double est, w1, w2, lr ,reg1, reg2
 
         lr = self.lr
+        reg1 = self.reg1
+        reg2 = self.reg2
 
         w1 = 0.5
         w2 = 0.5
@@ -357,7 +362,7 @@ class CoClusteringRegression(AlgoBase):
                         errors[ic] += (r - est) ** 2
                 cltr_i[i] = np.argmin(errors)
 
-            w1, w2 = self._computer_w(w1, w2, cltr_u, cltr_i, user_mean, item_mean, cltr_co_avg, cltr_u_avg, cltr_i_avg, lr)
+            w1, w2 = self._computer_w(w1, w2, cltr_u, cltr_i, user_mean, item_mean, cltr_co_avg, cltr_u_avg, cltr_i_avg, lr, reg1, reg2)
 
         # Compute averages one last time as clusters may have change
         # Set cdefed arrays as attributes as they are needed for prediction
@@ -374,7 +379,11 @@ class CoClusteringRegression(AlgoBase):
         self.w1 = w1
         self.w2 = w2
 
-    def _computer_w(self, w1, w2, cltr_u, cltr_i, user_mean, item_mean, cltr_co_avg, cltr_u_avg, cltr_i_avg, lr):
+    def _computer_w(self, w1, w2, cltr_u, cltr_i, user_mean, item_mean, cltr_co_avg, cltr_u_avg, cltr_i_avg, lr, reg1, reg2):
+
+        cdef int u, i, uc, ic
+
+        cdef double rating, err
 
         for u, i, rating in self.trainset.all_ratings():
             uc = cltr_u[u]
@@ -384,8 +393,8 @@ class CoClusteringRegression(AlgoBase):
                 - w1 * (user_mean[u] - cltr_u_avg[uc]) \
                 - w2 * (item_mean[i] - cltr_i_avg[ic])
 
-            w1 += lr * (err * (user_mean[u] - cltr_u_avg[uc]))
-            w2 += lr * (err * (item_mean[i] - cltr_i_avg[ic]))
+            w1 += lr * (err * (user_mean[u] - cltr_u_avg[uc]) - reg1 * w1)
+            w2 += lr * (err * (item_mean[i] - cltr_i_avg[ic]) - reg2 * w2)
 
         return w1, w2
 

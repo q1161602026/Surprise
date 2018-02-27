@@ -30,6 +30,7 @@ from .knns import KNNWithZScore
 from .matrix_factorization import SVD
 from .matrix_factorization import SVDpp
 from .matrix_factorization import QSVD
+from .matrix_factorization import QSVDp
 from .matrix_factorization import QSVDpp
 
 from .matrix_factorization import NMF
@@ -45,7 +46,7 @@ from .predictions import PredictionImpossible
 from .predictions import Prediction
 
 __all__ = ['AlgoBase', 'NormalPredictor', 'BaselineOnly', 'KNNBasic',
-           'KNNBaseline', 'KNNWithMeans', 'SVD', 'SVDpp', 'QSVD', 'QSVDpp', 'NMF', 'SlopeOne',
+           'KNNBaseline', 'KNNWithMeans', 'SVD', 'SVDpp', 'QSVD', 'QSVDp', 'QSVDpp', 'NMF', 'SlopeOne',
            'WeightedSlopeOne', 'BiPolarSlopeOne', 'SoftBoundBiPolarSlopeOne',
            'CoClustering', 'CoClusteringRegression',
            'PredictionImpossible', 'Prediction', 'KNNWithZScore']

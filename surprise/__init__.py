@@ -10,6 +10,7 @@ from .prediction_algorithms import KNNBaseline
 from .prediction_algorithms import SVD
 from .prediction_algorithms import SVDpp
 from .prediction_algorithms import QSVD
+from .prediction_algorithms import QSVDp
 from .prediction_algorithms import QSVDpp
 from .prediction_algorithms import NMF
 from .prediction_algorithms import SlopeOne
@@ -31,7 +32,7 @@ from .evaluate import GridSearch
 from . import dump
 
 __all__ = ['AlgoBase', 'NormalPredictor', 'BaselineOnly', 'KNNBasic',
-           'KNNWithMeans', 'KNNBaseline', 'SVD', 'SVDpp', 'QSVD', 'QSVDpp', 'NMF', 'SlopeOne',
+           'KNNWithMeans', 'KNNBaseline', 'SVD', 'SVDpp', 'QSVD', 'QSVDp', 'QSVDpp', 'NMF', 'SlopeOne',
            'WeightedSlopeOne', 'BiPolarSlopeOne', 'SoftBoundBiPolarSlopeOne',
            'CoClustering', 'CoClusteringRegression', 'PredictionImpossible', 'Prediction', 'Dataset',
            'Reader', 'Trainset', 'evaluate', 'print_perf', 'GridSearch',

@@ -16,6 +16,7 @@ from surprise.prediction_algorithms import KNNBaseline
 from surprise.prediction_algorithms import KNNWithMeans
 from surprise.prediction_algorithms import SVD
 from surprise.prediction_algorithms import SVDpp
+from surprise.prediction_algorithms import SVDq
 from surprise.prediction_algorithms import NMF
 from surprise.prediction_algorithms import SlopeOne
 from surprise.prediction_algorithms import WeightedSlopeOne
@@ -62,6 +63,7 @@ def main():
         'KNNWithMeans': KNNWithMeans,
         'SVD': SVD,
         'SVDpp': SVDpp,
+        'SVDq': SVDq,
         'NMF': NMF,
         'SlopeOne': SlopeOne,
         'WeightedSlopeOne': WeightedSlopeOne,

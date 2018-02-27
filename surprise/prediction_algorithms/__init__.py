@@ -29,6 +29,8 @@ from .knns import KNNWithMeans
 from .knns import KNNWithZScore
 from .matrix_factorization import SVD
 from .matrix_factorization import SVDpp
+from .matrix_factorization import SVDq
+
 from .matrix_factorization import NMF
 from .slope_one import SlopeOne
 from .slope_one import WeightedSlopeOne
@@ -42,7 +44,7 @@ from .predictions import PredictionImpossible
 from .predictions import Prediction
 
 __all__ = ['AlgoBase', 'NormalPredictor', 'BaselineOnly', 'KNNBasic',
-           'KNNBaseline', 'KNNWithMeans', 'SVD', 'SVDpp', 'NMF', 'SlopeOne',
+           'KNNBaseline', 'KNNWithMeans', 'SVD', 'SVDpp', 'SVDq', 'NMF', 'SlopeOne',
            'WeightedSlopeOne', 'BiPolarSlopeOne', 'SoftBoundBiPolarSlopeOne',
            'CoClustering', 'CoClusteringRegression',
            'PredictionImpossible', 'Prediction', 'KNNWithZScore']

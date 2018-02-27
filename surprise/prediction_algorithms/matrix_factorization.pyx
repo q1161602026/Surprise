@@ -116,10 +116,10 @@ class SVD(AlgoBase):
     """
 
     def __init__(self, n_factors=100, n_epochs=20, biased=True, init_mean=0,
-                 init_std_dev=.1, lr_all=.005,
-                 reg_all=.02, lr_bu=None, lr_bi=None, lr_pu=None, lr_qi=None,
-                 reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None, seed=0,
-                 verbose=False):
+                 init_std_dev=.1, lr_all=.005, reg_all=.02,
+                 lr_bu=None, lr_bi=None, lr_pu=None, lr_qi=None, lr_w=None,
+                 reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None, reg_w=None,
+                 seed=0, verbose=False):
 
 
         AlgoBase.__init__(self)
@@ -127,12 +127,15 @@ class SVD(AlgoBase):
         self.n_factors = n_factors
         self.n_epochs = n_epochs
         self.biased = biased
+
         self.init_mean = init_mean
         self.init_std_dev = init_std_dev
-        self.lr_bu = lr_bu if lr_bu is not None else lr_all
-        self.lr_bi = lr_bi if lr_bi is not None else lr_all
+
         self.pu = None
         self.qi = None
+
+        self.lr_bu = lr_bu if lr_bu is not None else lr_all
+        self.lr_bi = lr_bi if lr_bi is not None else lr_all
         self.lr_pu = lr_pu if lr_pu is not None else lr_all
         self.lr_qi = lr_qi if lr_qi is not None else lr_all
         self.reg_bu = reg_bu if reg_bu is not None else reg_all
@@ -191,16 +194,8 @@ class SVD(AlgoBase):
         # item factors
         cdef np.ndarray[np.double_t, ndim=2] qi
 
-        cdef np.ndarray[np.double_t, ndim=1] pqerr
-
-        cdef np.ndarray[np.double_t, ndim=1] w
-
-        cdef double b
-
-        cdef double act
-
         cdef int u, i, f
-        cdef double r, est, est1, est2, est3, dot1, dot2, err, err1, err2, err3, err4, puf, qif
+        cdef double r, err, dot, puf, qif
         cdef double global_mean = self.trainset.global_mean
 
         cdef double lr_bu = self.lr_bu
@@ -221,13 +216,6 @@ class SVD(AlgoBase):
         qi = np.random.normal(self.init_mean, self.init_std_dev,
                               (trainset.n_items, self.n_factors))
 
-        pqerr = np.zeros(self.n_factors, np.double)
-
-        w = np.random.normal(self.init_mean, self.init_std_dev,
-                              self.n_factors)
-
-        b = 0
-
         for current_epoch in tqdm(range(self.n_epochs)):
             if self.verbose:
                 print("Processing epoch {}".format(current_epoch))
@@ -236,49 +224,24 @@ class SVD(AlgoBase):
 
                 for u, i, r in trainset.all_ratings():
 
-                    est1 = global_mean + bu[u] + bi[i]
-                    est2 = 0
-                    est3 = 0
+                    est = global_mean + bu[u] + bi[i]
 
+                    dot = 0
+                    for f in range(self.n_factors):
+                        dot += qi[i, f] * pu[u, f]
 
-                    dot1 = 0
-                    dot2 = 0
+                    est += dot
+
+                    err = r - est
+
+                    bu[u] += lr_bu * (err - reg_bu * bu[u])
+                    bi[i] += lr_bi * (err - reg_bi * bi[i])
 
                     for f in range(self.n_factors):
-                        qif = qi[i, f]
-                        puf = pu[u, f]
-                        dot1 += qif * puf
-                        dot2 += - qif ** 2 - puf ** 2
-                        pqerr[f] = puf - qif
-
-                    act = sigmoid(pqerr, w, b)
-                    est1 += dot1 + dot2
-                    est2 += dot1
-                    est3 += dot1 + act - 0.5
-
-
-                    err1 = r - est1
-                    err2 = r - est2
-                    err3 = est1 - est2
-
-                    err4 = r - est3
-
-                    bu[u] += lr_bu * (err1 - err3 - reg_bu * bu[u])
-                    bi[i] += lr_bi * (err1 - err3 - reg_bi * bi[i])
-
-                    for f in range(self.n_factors):
-
                         puf = pu[u, f]
                         qif = qi[i, f]
-
-                        pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + err3 * (2 * puf) - reg_pu * puf)
-                        qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + err3 * (2 * qif) - reg_qi * qif)
-
-                        w[f] += lr_bu * (err4 * (1 - act) * act * pqerr[f] - reg_bu * w[f])
-
-
-                    b += lr_bu * (err4 * (1 - act) * act)
-
+                        pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
+                        qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
             else:
 
                 for u, i, r in trainset.all_ratings():
@@ -300,8 +263,6 @@ class SVD(AlgoBase):
         self.bi = bi
         self.pu = pu
         self.qi = qi
-        self.b = b
-        self.w = w
 
     def estimate(self, u, i):
         # Should we cythonize this as well?
@@ -310,26 +271,20 @@ class SVD(AlgoBase):
         known_item = self.trainset.knows_item(i)
 
         if self.biased:
+            est = self.trainset.global_mean
 
-            est = 0
+            if known_user:
+                est += self.bu[u]
+
+            if known_item:
+                est += self.bi[i]
 
             if known_user and known_item:
-
-                est += np.dot(self.qi[i], self.pu[u]) + sigmoid(self.pu[u] - self.qi[i], self.w, self.b) - 0.5
-
-            elif known_user:
-
-                est += self.bu[u] - np.dot(self.pu[u], self.pu[u])
-
-            elif known_item:
-
-                est += self.bi[i] - np.dot(self.qi[i], self.qi[i])
+                est += np.dot(self.qi[i], self.pu[u])
 
         else:
             if known_user and known_item:
-
                 est = np.dot(self.qi[i], self.pu[u])
-
             else:
 
                 raise PredictionImpossible('User and item are unknown.')
@@ -756,3 +711,187 @@ class NMF(AlgoBase):
                 raise PredictionImpossible('User and item are unknown.')
 
         return est
+
+
+class SVDq(AlgoBase):
+    ## my Quadratic SVD
+
+
+    def __init__(self, n_factors=100, n_epochs=20, biased=True, init_mean=0,
+                 init_std_dev=.1, lr_all=.005,
+                 reg_all=.02, lr_bu=None, lr_bi=None, lr_pu=None, lr_qi=None,
+                 reg_bu=None, reg_bi=None, reg_pu=None, reg_qi=None, seed=0,
+                 verbose=False):
+
+
+        AlgoBase.__init__(self)
+
+        self.n_factors = n_factors
+        self.n_epochs = n_epochs
+        self.biased = biased
+        self.init_mean = init_mean
+        self.init_std_dev = init_std_dev
+        self.lr_bu = lr_bu if lr_bu is not None else lr_all
+        self.lr_bi = lr_bi if lr_bi is not None else lr_all
+        self.pu = None
+        self.qi = None
+        self.lr_pu = lr_pu if lr_pu is not None else lr_all
+        self.lr_qi = lr_qi if lr_qi is not None else lr_all
+        self.reg_bu = reg_bu if reg_bu is not None else reg_all
+        self.reg_bi = reg_bi if reg_bi is not None else reg_all
+        self.reg_pu = reg_pu if reg_pu is not None else reg_all
+        self.reg_qi = reg_qi if reg_qi is not None else reg_all
+        self.seed = seed
+        self.verbose = verbose
+
+
+    def train(self, trainset):
+
+        AlgoBase.train(self, trainset)
+        self.sgd(trainset)
+
+    def sgd(self, trainset):
+
+        # OK, let's breath. I've seen so many different implementation of this
+        # algorithm that I just not sure anymore of what it should do. I've
+        # implemented the version as described in the BellKor papers (RS
+        # Handbook, etc.). Mymedialite also does it this way. In his post
+        # however, Funk seems to implicitly say that the algo looks like this
+        # (see reg below):
+        # for f in range(n_factors):
+        #       for _ in range(n_iter):
+        #           for u, i, r in all_ratings:
+        #               err = r_ui - <p[u, :f+1], q[i, :f+1]>
+        #               update p[u, f]
+        #               update q[i, f]
+        # which is also the way https://github.com/aaw/IncrementalSVD.jl
+        # implemented it.
+        #
+        # Funk: "Anyway, this will train one feature (aspect), and in
+        # particular will find the most prominent feature remaining (the one
+        # that will most reduce the error that's left over after previously
+        # trained features have done their best). When it's as good as it's
+        # going to get, shift it onto the pile of done features, and start a
+        # new one. For efficiency's sake, cache the residuals (all 100 million
+        # of them) so when you're training feature 72 you don't have to wait
+        # for predictRating() to re-compute the contributions of the previous
+        # 71 features. You will need 2 Gig of ram, a C compiler, and good
+        # programming habits to do this."
+
+        # A note on cythonization: I haven't dived into the details, but
+        # accessing 2D arrays like pu using just one of the indices like pu[u]
+        # is not efficient. That's why the old (cleaner) version can't be used
+        # anymore, we need to compute the dot products by hand, and update
+        # user and items factors by iterating over all factors...
+
+        # user biases
+        cdef np.ndarray[np.double_t] bu
+        # item biases
+        cdef np.ndarray[np.double_t] bi
+        # user factors
+        cdef np.ndarray[np.double_t, ndim=2] pu
+        # item factors
+        cdef np.ndarray[np.double_t, ndim=2] qi
+
+        cdef int u, i, f
+        cdef double r, err, dot, puf, qif
+        cdef double global_mean = self.trainset.global_mean
+
+        cdef double lr_bu = self.lr_bu
+        cdef double lr_bi = self.lr_bi
+        cdef double lr_pu = self.lr_pu
+        cdef double lr_qi = self.lr_qi
+
+        cdef double reg_bu = self.reg_bu
+        cdef double reg_bi = self.reg_bi
+        cdef double reg_pu = self.reg_pu
+        cdef double reg_qi = self.reg_qi
+
+        np.random.seed(self.seed)
+        bu = np.zeros(trainset.n_users, np.double)
+        bi = np.zeros(trainset.n_items, np.double)
+        pu = np.random.normal(self.init_mean, self.init_std_dev,
+                              (trainset.n_users, self.n_factors))
+        qi = np.random.normal(self.init_mean, self.init_std_dev,
+                              (trainset.n_items, self.n_factors))
+
+        for current_epoch in tqdm(range(self.n_epochs)):
+            if self.verbose:
+                print("Processing epoch {}".format(current_epoch))
+            for u, i, r in trainset.all_ratings():
+
+                # compute current error
+                dot = 0  # <q_i, p_u>
+
+                # update factors
+                if self.biased:
+
+                    est = global_mean + bu[u] + bi[i]
+
+                    for f in range(self.n_factors):
+                        dot += (qi[i, f] * pu[u, f] - qi[i, f] ** 2 - pu[u, f] ** 2)
+
+                    est += dot
+                    err = r - est
+
+                    bu[u] += lr_bu * (err - reg_bu * bu[u])
+                    bi[i] += lr_bi * (err - reg_bi * bi[i])
+
+                    for f in range(self.n_factors):
+                        puf = pu[u, f]
+                        qif = qi[i, f]
+                        pu[u, f] += lr_pu * (err * (qif - 2 * puf) - reg_pu * puf)
+                        qi[i, f] += lr_qi * (err * (puf - 2 * qif) - reg_qi * qif)
+                else:
+
+                    for f in range(self.n_factors):
+                        dot += qi[i, f] * pu[u, f]
+
+                    est = dot
+                    err = r - est
+
+                    for f in range(self.n_factors):
+                        puf = pu[u, f]
+                        qif = qi[i, f]
+                        pu[u, f] += lr_pu * (err * qif - reg_pu * puf)
+                        qi[i, f] += lr_qi * (err * puf - reg_qi * qif)
+
+        self.bu = bu
+        self.bi = bi
+        self.pu = pu
+        self.qi = qi
+
+    def estimate(self, u, i):
+        # Should we cythonize this as well?
+
+        known_user = self.trainset.knows_user(u)
+        known_item = self.trainset.knows_item(i)
+
+        if self.biased:
+
+            est = self.trainset.global_mean
+
+            if known_user and known_item:
+
+                est += self.bu[u] + self.bi[i] + np.dot(self.qi[i], self.pu[u]) - np.dot(self.pu[u], self.pu[u]) - np.dot(self.qi[i], self.qi[i])
+
+            elif known_user:
+
+                est += self.bu[u] - np.dot(self.pu[u], self.pu[u])
+
+            elif known_item:
+
+                est += self.bi[i] - np.dot(self.qi[i], self.qi[i])
+
+        else:
+            if known_user and known_item:
+
+                est = np.dot(self.qi[i], self.pu[u])
+
+            else:
+
+                raise PredictionImpossible('User and item are unknown.')
+
+        return est
+
+

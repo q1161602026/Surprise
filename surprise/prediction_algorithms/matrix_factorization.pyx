@@ -1038,7 +1038,7 @@ class QSVDpp(AlgoBase):
         cdef np.ndarray[np.double_t, ndim=1] w
 
         cdef int u, i, f
-        cdef double b, act, r, est1, est2, est3, dot1, dot2, err1, err2, err3, err4, puf, qif
+        cdef double b, act, r, est1, est2, est3, dot1, dot2, err1, err2, err3, err4, puf, qif, wf
         cdef double global_mean = self.trainset.global_mean
 
         cdef double lr_bu = self.lr_bu
@@ -1110,11 +1110,12 @@ class QSVDpp(AlgoBase):
 
                     puf = pu[u, f]
                     qif = qi[i, f]
+                    wf = w[f]
 
-                    pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + err4 * (2 * puf) - reg_pu * puf)
-                    qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + err4 * (2 * qif) - reg_qi * qif)
+                    w[f] += lr_w * (err3 * (1 - act) * act * pqerr[f] - reg_w * wf)
 
-                    w[f] += lr_bu * (err3 * (1 - act) * act * pqerr[f] - reg_w * w[f])
+                    pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + err3 * (1 - act) * act * wf + 2 * err4 * puf - reg_pu * puf)
+                    qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + err3 * (1 - act) * act * wf + 2 * err4 * qif - reg_qi * qif)
 
 
                 b += lr_bu * (err3 * (1 - act) * act)

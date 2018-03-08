@@ -141,12 +141,12 @@ class WeightedSlopeOne(AlgoBase):
 
         value = dict((j, rating) for j, rating in self.trainset.ur[uiid])
 
-        est = self.trainset.user_mean[uiid]
-
         if Ri:
             num = sum(self.dev[iiid, j] + self.freq[iiid, j] * value[j] for j in Ri)
             denom = sum(self.freq[iiid, j] for j in Ri)
             est = num / denom
+        else:
+            est = self.trainset.user_mean[uiid]
 
         return est
 
@@ -210,16 +210,14 @@ class BiPolarSlopeOne(AlgoBase):
 
         value = dict((j, rating) for j, rating in self.trainset.ur[uiid])
 
-        user_mean = self.trainset.user_mean[uiid]
-
         Ri = [j for (j, _) in self.trainset.ur[uiid] if self.freq[iiid, j] > 0]
-
-        est = user_mean
 
         if Ri:
             num = sum(self.dev[iiid, j] + self.freq[iiid, j] * value[j] for j in Ri)
             denom = sum(self.freq[iiid, j] for j in Ri)
             est = num / denom
+        else:
+            est = self.trainset.user_mean[uiid]
 
         return est
 
@@ -287,14 +285,13 @@ class SoftBoundBiPolarSlopeOne(AlgoBase):
         user_mean = self.trainset.user_mean[uiid]
         item_mean = self.trainset.item_mean[iiid]
 
-
         Ri = [j for (j, _) in self.trainset.ur[uiid] if self.freq[iiid, j] > 0]
-
-        est = (user_mean + item_mean) / 2
 
         if Ri:
             num = sum(self.dev[iiid, j] + self.freq[iiid, j] * value[j] for j in Ri)
             denom = sum(self.freq[iiid, j] for j in Ri)
             est = num / denom
+        else:
+            est = (user_mean + item_mean) / 2
 
         return est

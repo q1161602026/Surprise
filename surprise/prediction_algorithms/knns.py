@@ -9,6 +9,7 @@ from six import iteritems
 import heapq
 
 from .predictions import PredictionImpossible
+from .. import similarities as sims
 from .algo_base import AlgoBase
 
 
@@ -27,12 +28,18 @@ class SymmetricAlgo(AlgoBase):
     reversed.
     """
 
-    def __init__(self, sim_options=None, **kwargs):
+    def __init__(self, **kwargs):
 
-        if sim_options is None:
-            sim_options = {}
+        AlgoBase.__init__(self, **kwargs)
 
-        AlgoBase.__init__(self, sim_options=sim_options, **kwargs)
+        self.sim_options = kwargs.get('sim_options', {})
+
+        if 'user_based' not in self.sim_options:
+            self.sim_options['user_based'] = True
+
+        self.sim = None
+        self.k_nearest_neighbors = None
+
         self.n_x = None
         self.n_y = None
         self.xr = None
@@ -40,15 +47,26 @@ class SymmetricAlgo(AlgoBase):
         self.bx = None
         self.by = None
 
-    def train(self, trainset):
+    def train(self, trainset, comp_sim=True):
 
         AlgoBase.train(self, trainset)
 
+        if comp_sim:
+            self.sim = self.compute_similarities()
+        else:
+            self.sim = None
+
+        self.k_nearest_neighbors = None
+
         ub = self.sim_options['user_based']
+
         self.n_x = self.trainset.n_users if ub else self.trainset.n_items
         self.n_y = self.trainset.n_items if ub else self.trainset.n_users
         self.xr = self.trainset.ur if ub else self.trainset.ir
         self.yr = self.trainset.ir if ub else self.trainset.ur
+
+    def set_sim(self, sim):
+        self.sim = sim
 
     def switch(self, u_stuff, i_stuff):
         """Return x_stuff and y_stuff depending on the user_based field."""
@@ -57,6 +75,110 @@ class SymmetricAlgo(AlgoBase):
             return u_stuff, i_stuff
         else:
             return i_stuff, u_stuff
+
+    def compute_similarities(self):
+        """Build the similarity matrix.
+
+        The way the similarity matrix is computed depends on the
+        ``sim_options`` parameter passed at the creation of the algorithm (see
+        :ref:`similarity_measures_configuration`).
+
+        This method is only relevant for algorithms using a similarity measure,
+        such as the :ref:`k-NN algorithms <pred_package_knn_inpired>`.
+
+        Returns:
+            The similarity matrix."""
+
+        construction_func = {'jaccard': sims.jaccard,
+                             'cosine': sims.cosine,
+                             'msd': sims.msd,
+                             'pearson': sims.pearson,
+                             'pearson_baseline': sims.pearson_baseline,
+                             'cosine_adjusted': sims.cosine_adjusted,
+                             }
+
+        if self.sim_options['user_based']:
+            n_x, yr = self.trainset.n_users, self.trainset.ir
+        else:
+            n_x, yr = self.trainset.n_items, self.trainset.ur
+
+        min_support = self.sim_options.get('min_support', 1)
+
+        args = [n_x, yr, min_support]
+
+        name = self.sim_options.get('name', 'msd').lower()
+        if name == 'pearson_baseline':
+            shrinkage = self.sim_options.get('shrinkage', 100)
+            bu, bi = self.compute_baselines()
+            if self.sim_options['user_based']:
+                bx, by = bu, bi
+            else:
+                bx, by = bi, bu
+
+            args += [self.trainset.global_mean, bx, by, shrinkage]
+
+        elif name == 'pearson':
+            if self.sim_options['user_based']:
+                x_mean = self.trainset.user_mean
+            else:
+                x_mean = self.trainset.item_mean
+
+            args += [x_mean]
+
+        elif name == 'cosine_adjusted':
+            if self.sim_options['user_based']:
+                y_mean = self.trainset.item_mean
+            else:
+                y_mean = self.trainset.user_mean
+
+            args += [y_mean]
+
+        try:
+            print('Computing the {0} similarity matrix...'.format(name))
+            sim = construction_func[name](*args)
+            print('Done computing similarity matrix.')
+            return sim
+        except KeyError:
+            raise NameError('Wrong sim name ' + name + '. Allowed values ' +
+                            'are ' + ', '.join(construction_func.keys()) + '.')
+
+    def get_neighbors(self, iid, k):
+        """Return the ``k`` nearest neighbors of ``iid``, which is the inner id
+        of a user or an item, depending on the ``user_based`` field of
+        ``sim_options`` (see :ref:`similarity_measures_configuration`).
+
+        As the similarities are computed on the basis of a similarity measure,
+        this method is only relevant for algorithms using a similarity measure,
+        such as the :ref:`k-NN algorithms <pred_package_knn_inpired>`.
+
+        For a usage example, see the :ref:`FAQ <get_k_nearest_neighbors>`.
+
+        Args:
+            iid(int): The (inner) id of the user (or item) for which we want
+                the nearest neighbors. See :ref:`this note<raw_inner_note>`.
+
+            k(int): The number of neighbors to retrieve.
+
+        Returns:
+            The list of the ``k`` (inner) ids of the closest users (or items)
+            to ``iid``.
+        """
+        if self.k_nearest_neighbors is None:
+            self.k_nearest_neighbors = {}
+
+        if iid in self.k_nearest_neighbors:
+            return self.k_nearest_neighbors[iid]
+
+        if self.sim_options['user_based']:
+            all_instances = self.trainset.all_users
+        else:
+            all_instances = self.trainset.all_items
+        others = [(x, self.sim[iid, x]) for x in all_instances() if x != iid and self.sim[iid, x] != 0]
+        others.sort(key=lambda tple: tple[1], reverse=True)
+        k_nearest_neighbors = [j for (j, _) in others[:k]]
+
+        self.k_nearest_neighbors[iid] = k_nearest_neighbors
+        return k_nearest_neighbors
 
 
 class KNNBasic(SymmetricAlgo):
@@ -99,10 +221,9 @@ class KNNBasic(SymmetricAlgo):
         self.k = k
         self.min_k = min_k
 
-    def train(self, trainset):
+    def train(self, trainset, comp_sim=True):
 
-        SymmetricAlgo.train(self, trainset)
-        self.sim = self.compute_similarities()
+        SymmetricAlgo.train(self, trainset, comp_sim)
 
     def estimate(self, u, i):
 
@@ -178,10 +299,9 @@ class KNNWithMeans(SymmetricAlgo):
         self.min_k = min_k
         self.means = None
 
-    def train(self, trainset):
+    def train(self, trainset, comp_sim=True):
 
-        SymmetricAlgo.train(self, trainset)
-        self.sim = self.compute_similarities()
+        SymmetricAlgo.train(self, trainset, comp_sim)
 
         self.means = np.zeros(self.n_x)
         for x, ratings in iteritems(self.xr):
@@ -278,9 +398,9 @@ class KNNBaseline(SymmetricAlgo):
         self.k = k
         self.min_k = min_k
 
-    def train(self, trainset):
+    def train(self, trainset, comp_sim=True):
 
-        SymmetricAlgo.train(self, trainset)
+        SymmetricAlgo.train(self, trainset, comp_sim)
         self.bu, self.bi = self.compute_baselines()
         self.bx, self.by = self.switch(self.bu, self.bi)
         self.sim = self.compute_similarities()
@@ -372,9 +492,9 @@ class KNNWithZScore(SymmetricAlgo):
         self.sigmas = None
         self.overall_sigma = None
 
-    def train(self, trainset):
+    def train(self, trainset, comp_sim=True):
 
-        SymmetricAlgo.train(self, trainset)
+        SymmetricAlgo.train(self, trainset, comp_sim)
 
         self.means = np.zeros(self.n_x)
         self.sigmas = np.zeros(self.n_x)

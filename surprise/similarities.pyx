@@ -96,23 +96,24 @@ def cosine(n_x, yr, min_support):
     """
 
     # sum (r_xy * r_x'y) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] prods
+    cdef np.ndarray[np.double_t, ndim=2] prods
     # number of common ys
     cdef np.ndarray[np.int_t, ndim=2] freq
     # sum (r_xy ^ 2) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] sqi
+    cdef np.ndarray[np.double_t, ndim=2] sqi
     # sum (r_x'y ^ 2) for common ys
-    cdef np.ndarray[np.int_t, ndim=2] sqj
+    cdef np.ndarray[np.double_t, ndim=2] sqj
     # the similarity matrix
     cdef np.ndarray[np.double_t, ndim=2] sim
 
-    cdef int xi, xj, ri, rj
+    cdef int xi, xj
+    cdef double ri, rj
     cdef int min_sprt = min_support
 
-    prods = np.zeros((n_x, n_x), np.int)
     freq = np.zeros((n_x, n_x), np.int)
-    sqi = np.zeros((n_x, n_x), np.int)
-    sqj = np.zeros((n_x, n_x), np.int)
+    prods = np.zeros((n_x, n_x), np.double)
+    sqi = np.zeros((n_x, n_x), np.double)
+    sqj = np.zeros((n_x, n_x), np.double)
     sim = np.zeros((n_x, n_x), np.double)
 
     for y, y_ratings in iteritems(yr):
@@ -178,7 +179,8 @@ def msd(n_x, yr, min_support):
     # the similarity matrix
     cdef np.ndarray[np.double_t, ndim=2] sim
 
-    cdef int xi, xj, ri, rj
+    cdef int xi, xj
+    cdef double ri, rj
     cdef int min_sprt = min_support
 
     sq_diff = np.zeros((n_x, n_x), np.double)

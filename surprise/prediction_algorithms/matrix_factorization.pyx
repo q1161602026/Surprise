@@ -1114,9 +1114,8 @@ class QSVDpp(AlgoBase):
 
                     w[f] += lr_w * (err3 * (1 - act) * act * pqerr[f] - reg_w * wf)
 
-                    pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + err3 * (1 - act) * act * wf + 2 * err4 * puf - reg_pu * puf)
-                    qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + err3 * (1 - act) * act * wf + 2 * err4 * qif - reg_qi * qif)
-
+                    pu[u, f] += lr_pu * (err1 * (qif - 2 * puf) + err2 * qif + 2 * err4 * puf - reg_pu * puf)
+                    qi[i, f] += lr_qi * (err1 * (puf - 2 * qif) + err2 * puf + 2 * err4 * qif - reg_qi * qif)
 
                 b += lr_bu * (err3 * (1 - act) * act)
 
